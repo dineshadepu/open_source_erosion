@@ -1,0 +1,3 @@
+https://github.com/pypr/pysph/zipball/master
+https://github.com/pypr/automan/zipball/master
+matplotlib

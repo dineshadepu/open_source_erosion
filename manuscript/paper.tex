@@ -1,0 +1,80 @@
+\documentclass[preprint,12pt]{elsarticle}
+
+\usepackage{hyperref}
+\usepackage{graphicx}
+\usepackage{subcaption}
+\usepackage{amssymb}
+\usepackage{amsmath}
+\usepackage{multirow}
+\usepackage[utf8]{inputenc}
+\usepackage{cleveref}
+
+% For the TODOs
+\usepackage{xcolor}
+\usepackage{xargs}
+\usepackage[colorinlistoftodos,textsize=footnotesize]{todonotes}
+\newcommand{\todoin}{\todo[inline]}
+% from here: https://tex.stackexchange.com/questions/9796/how-to-add-todo-notes
+\newcommandx{\unsure}[2][1=]{\todo[linecolor=red,backgroundcolor=red!25,bordercolor=red,#1]{#2}}
+\newcommandx{\change}[2][1=]{\todo[linecolor=blue,backgroundcolor=blue!25,bordercolor=blue,#1]{#2}}
+\newcommandx{\info}[2][1=]{\todo[linecolor=OliveGreen,backgroundcolor=OliveGreen!25,bordercolor=OliveGreen,#1]{#2}}
+
+%Boldtype for greek symbols
+\newcommand{\teng}[1]{\ensuremath{\boldsymbol{#1}}}
+\newcommand{\ten}[1]{\ensuremath{\mathbf{#1}}}
+
+\usepackage{lineno}
+
+\journal{}
+
+\begin{document}
+
+\begin{frontmatter}
+
+  \title{An open source software for solid erosion with SPH}
+  \author[IITB]{A Dinesh\corref{cor1}}
+  \ead{adepu.dinesh.a@gmail.com}
+  \author[IITB]{Prabhu Ramachandran}
+  \ead{prabhu@aero.iitb.ac.in}
+  \address[IITB]{Department of Aerospace Engineering, Indian Institute of
+    Technology Bombay, Powai, Mumbai 400076}
+
+\cortext[cor1]{Corresponding author}
+
+\begin{abstract}
+\end{abstract}
+
+\begin{keyword}
+%% keywords here, in the form: keyword \sep keyword
+{XXX}, {XXX}, {XXX}
+
+%% MSC codes here, in the form: \MSC code \sep code
+%% or \MSC[2008] code \sep code (2000 is the default)
+
+\end{keyword}
+
+\end{frontmatter}
+
+% \linenumbers
+
+
+\section{Introduction}
+\label{sec:intro}
+
+
+
+
+
+
+\section*{References}
+\bibliographystyle{model6-num-names}
+\bibliography{references}
+
+
+\end{document}
+
+%%% Local Variables:
+%%% mode: latex
+%%% TeX-master: "paper"
+%%% fill-column: 78
+%%% End:
