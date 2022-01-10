@@ -165,12 +165,12 @@ class ApplyForceOnRigidBody(Equation):
             d_fx[d_idx] += d_tmp_tangential_force[0]
 
 
-class Mohseni2021FreeSlidingOnASlope(Application):
+class Mohseni2021FreeSlidingOnASlopeChallengingGeometry(Application):
     def initialize(self):
         self.dim = 2
         spacing = 1e-2
 
-        self.wall_length = 100.
+        self.wall_length = 0.5
         self.wall_height = 0.
         self.wall_spacing = spacing
         self.wall_layers = 0
@@ -191,7 +191,7 @@ class Mohseni2021FreeSlidingOnASlope(Application):
 
         # solver data
         self.tf = 3.
-        self.dt = 1e-4
+        self.dt = 5e-5
 
         # Rigid body collision related data
         self.limit = 6
@@ -267,12 +267,22 @@ class Mohseni2021FreeSlidingOnASlope(Application):
         no_par = len(np.where(rigid_body.force_idx_ft == 1.)[0])
         rigid_body.delta_ft[0] = self.ft_increment / no_par
 
+        # ==============================================
+        # ==============================================
         # Create wall particles
         length_fac = 1.
         x, y = get_2d_block(dx=self.rigid_body_spacing,
                             length=self.wall_length * length_fac,
                             height=self.wall_layers * self.wall_spacing)
-        contact_force_is_boundary = get_contact_force_is_boundary(x, y, self.rigid_body_spacing)
+        x1, y1, _z = rotate(x, y, np.zeros_like(x), axis=np.array([0., 0., 1.]), angle=-30.)
+        x2 = np.arange(0., 4. * self.wall_length, self.rigid_body_spacing)
+        x2[:] += max(x1) - min(x2)
+        y2 = np.ones_like(x2) * min(y1)
+
+        x = np.concatenate((x1, x2))
+        y = np.concatenate((y1, y2))
+
+        contact_force_is_boundary = np.ones_like(x)
 
         # x, y, _z = rotate(x, y, np.zeros(len(x)), axis=np.array([0., 0., 1.]),
         #                   angle=-(90. - self.angle))
@@ -294,13 +304,8 @@ class Mohseni2021FreeSlidingOnASlope(Application):
                                       'E': 69 * 1e9,
                                       'poisson_ratio': 0.3,
                                   })
-        # remove particles outside the circle
-        indices = []
-        for i in range(len(wall.x)):
-            if wall.x[i] < - self.rigid_body_length:
-                indices.append(i)
-
-        wall.remove_particles(indices)
+        # ==============================================
+        # ==============================================
 
         # move rigid body to up
         # rigid_body.y[:] += max(wall.y) - min(rigid_body.y) + self.rigid_body_spacing * 1.
@@ -309,16 +314,14 @@ class Mohseni2021FreeSlidingOnASlope(Application):
 
         xc, yc, _zs = rotate(rigid_body.x, rigid_body.y, rigid_body.z, axis=np.array([0., 0., 1.]),
                              angle=-self.angle)
-        x, y, _z = rotate(wall.x, wall.y, wall.z, axis=np.array([0., 0., 1.]), angle=-30.)
-
         rigid_body.x[:] = xc[:]
         rigid_body.y[:] = yc[:]
         radians = (90. - self.angle) * np.pi / 180.
         rigid_body.x[:] += (self.rigid_body_length / 2. + self.rigid_body_spacing) * np.cos(radians)
         rigid_body.y[:] += (self.rigid_body_length / 2. + self.rigid_body_spacing) * np.sin(radians)
 
-        wall.x[:] = x[:]
-        wall.y[:] = y[:]
+        # wall.x[:] = x[:]
+        # wall.y[:] = y[:]
 
         # rigid_body.y[:] += - 0.0001
         # rigid_body.x[:] += self.rigid_body_spacing * 0.5
@@ -391,11 +394,28 @@ class Mohseni2021FreeSlidingOnASlope(Application):
             vel = (rb.vcm[0]**2. + rb.vcm[1]**2. + rb.vcm[2]**2.)**0.5
             velocity.append(vel)
 
-        # ========================
-        # x amplitude figure
-        # ========================
+        # analytical data
+        t_analytical = np.array([0., 2.989])
+        v_analytical = np.array([0., 9.628])
+        if self.options.fric_coeff == 0.2:
+            t_analytical = np.array([0., 2.989])
+            v_analytical = np.array([0., 9.628])
+
+        elif self.options.fric_coeff == 0.4:
+            t_analytical = np.array([0., 3.1393323271673674])
+            v_analytical = np.array([0., 4.745746192173761])
+
+        elif self.options.fric_coeff == np.tan(np.pi/6):
+            t_analytical = np.array([0., 3.0])
+            v_analytical = np.array([0., 0.])
+
+        elif self.options.fric_coeff > np.tan(np.pi/6):
+            t_analytical = np.array([0., 3.0])
+            v_analytical = np.array([0., 0.])
+
         plt.clf()
         plt.plot(t, velocity, "-", label='Mohsen')
+        plt.plot(t_analytical, v_analytical, "--", label='Analytical')
 
         plt.title('Velocity')
         plt.xlabel('t')
@@ -409,7 +429,7 @@ class Mohseni2021FreeSlidingOnASlope(Application):
 
 
 if __name__ == '__main__':
-    app = Mohseni2021FreeSlidingOnASlope()
+    app = Mohseni2021FreeSlidingOnASlopeChallengingGeometry()
     app.run()
     app.post_process(app.info_filename)
 
@@ -417,3 +437,4 @@ if __name__ == '__main__':
 # fn_x, fn_y, z
 # u, v, w
 # delta_lt_x, delta_lt_y, delta_lt_z
+# contact_force_normal_x, contact_force_normal_y, contact_force_normal_z

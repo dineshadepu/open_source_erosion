@@ -273,10 +273,98 @@ class Mohseni2021FreeSlidingOnASlope(Problem):
         # ==================================
 
 
+class Mohseni2021FreeSlidingOnASlopeChallengingGeometry(Problem):
+    def get_name(self):
+        return 'mohseni_2021_free_sliding_on_a_slope_challenging_geometry'
+
+    def setup(self):
+        get_path = self.input_path
+
+        cmd = 'python code/mohseni_2021_free_sliding_on_a_slope_challenging_geometry.py' + backend
+
+        # Base case info
+        self.case_info = {
+            'fric_coeff_0_2': (dict(
+                scheme='rb3d',
+                detail=None,
+                pfreq=300,
+                kr=1e5,
+                fric_coeff=0.2,
+                tf=3.,
+                ), r'$\mu=$0.2'),
+
+            'fric_coeff_0_4': (dict(
+                scheme='rb3d',
+                detail=None,
+                pfreq=100,
+                kr=1e8,
+                fric_coeff=0.4,
+                tf=1.,
+                ), r'$\mu=$0.2'),
+        }
+
+        self.cases = [
+            Simulation(get_path(name), cmd,
+                       job_info=dict(n_core=n_core,
+                                     n_thread=n_thread), cache_nnps=None,
+                       **scheme_opts(self.case_info[name][0]))
+            for name in self.case_info
+        ]
+
+    def run(self):
+        self.make_output_dir()
+        self.plot_displacement()
+
+    def plot_displacement(self):
+        data = {}
+        for name in self.case_info:
+            data[name] = np.load(self.input_path(name, 'results.npz'))
+
+        rand_case = (list(data.keys())[0])
+
+        txsun = data[rand_case]['txsun']
+        xdsun = data[rand_case]['xdsun']
+        txbogaers = data[rand_case]['txbogaers']
+        xdbogaers = data[rand_case]['xdbogaers']
+        txidelsohn = data[rand_case]['txidelsohn']
+        xdidelsohn = data[rand_case]['xdidelsohn']
+        txliu = data[rand_case]['txliu']
+        xdliu = data[rand_case]['xdliu']
+
+        # ==================================
+        # Plot x amplitude
+        # ==================================
+        plt.clf()
+        plt.plot(txsun, xdsun, "o", label='Sun et al 2019, MPS-DEM')
+        plt.plot(txbogaers, xdbogaers, "^", label='Bogaers 2016, QN-LS')
+        plt.plot(txidelsohn, xdidelsohn, "+", label='Idelsohn 20108, PFEM')
+        plt.plot(txliu, xdliu, "v", label='Liu 2013, SPH')
+
+        for name in self.case_info:
+            t_ctvf = data[name]['t_ctvf']
+            x_ctvf = data[name]['x_ctvf']
+
+            plt.plot(t_ctvf, x_ctvf, '-', label=self.case_info[name][1])
+
+        plt.xlabel('time')
+        plt.ylabel('x - amplitude')
+        plt.legend()
+        # plt.tight_layout(pad=0)
+        plt.savefig(self.output_path('x_amplitude.pdf'))
+        plt.clf()
+        plt.close()
+        # ==================================
+        # Plot x amplitude
+        # ==================================
+
+
+
 if __name__ == '__main__':
     PROBLEMS = [TestRigidBodyCollision1,
                 Mohseni2021ControlledSlidingOnAFlatSurface,
-                Mohseni2021FreeSlidingOnASlope]
+                Mohseni2021FreeSlidingOnASlope,
+                Mohseni2021FreeSlidingOnASlopeChallengingGeometry,
+    ]
 
     automator = Automator(
         simulation_dir='outputs',

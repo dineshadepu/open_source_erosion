@@ -1465,7 +1465,7 @@ class ComputeContactForce(Equation):
                   d_initial_spacing0,
                   dt, t):
         overlap = d_initial_spacing0[0] - d_contact_force_dist[d_idx]
-        if overlap > 0. and overlap < d_contact_force_dist[d_idx] / 2.:
+        if overlap > 0. and overlap != d_initial_spacing0[0]:
             d_overlap[d_idx] = overlap
             tmp = self.kr * overlap
 

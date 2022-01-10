@@ -406,6 +406,10 @@ class Mohseni2021FreeSlidingOnASlope(Application):
             t_analytical = np.array([0., 3.0])
             v_analytical = np.array([0., 0.])
 
+        elif self.options.fric_coeff > np.tan(np.pi/6):
+            t_analytical = np.array([0., 3.0])
+            v_analytical = np.array([0., 0.])
+
         plt.clf()
         plt.plot(t, velocity, "-", label='Mohsen')
         plt.plot(t_analytical, v_analytical, "--", label='Analytical')
