@@ -47,6 +47,7 @@ class IdentifyBoundaryParticleCosAngle(Equation):
         xij = declare('matrix(3)')
         idx3 = 3 * d_idx
 
+        h_i = d_h[d_idx]
         # normal norm is always one
         if d_is_boundary[d_idx] == 1:
             for i in range(N_NBRS):
@@ -55,14 +56,14 @@ class IdentifyBoundaryParticleCosAngle(Equation):
                 xij[1] = d_y[d_idx] - s_y[s_idx]
                 xij[2] = d_z[d_idx] - s_z[s_idx]
                 rij = sqrt(xij[0]**2. + xij[1]**2. + xij[2]**2.)
-                if rij > 1e-9 * d_h[d_idx]:
+                if rij > 1e-9 * h_i and rij < 2. * h_i:
                     # dot product between the vector and line joining sidx
                     dot = -(d_normal[idx3] * xij[0] + d_normal[idx3 + 1] *
                             xij[1] + d_normal[idx3 + 2] * xij[2])
 
                     fac = dot / rij
 
-                    if fac > 0.75:
+                    if fac > 0.5:
                         d_is_boundary[d_idx] = 0
                         break
 

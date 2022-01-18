@@ -1265,12 +1265,12 @@ class ComputeContactForceNormals(Equation):
 
     """
     def initialize(self, d_idx,
-                   XIJ, d_m, RIJ,
+                   d_m,
                    d_contact_force_normal_tmp_x,
                    d_contact_force_normal_tmp_y,
                    d_contact_force_normal_tmp_z,
                    d_contact_force_normal_wij,
-                   d_normal, dt, t):
+                   dt, t):
         d_contact_force_normal_tmp_x[d_idx] = 0.
         d_contact_force_normal_tmp_y[d_idx] = 0.
         d_contact_force_normal_tmp_z[d_idx] = 0.
@@ -1347,13 +1347,13 @@ class ComputeContactForceDistanceAndClosestPoint(Equation):
                    d_x_source,
                    d_y_source,
                    d_z_source,
-                   d_initial_spacing0,
+                   d_spacing0,
                    dt, t):
         d_contact_force_dist[d_idx] = 0.
         d_contact_force_dist_tmp[d_idx] = 0.
         d_contact_force_normal_wij[d_idx] = 0.
 
-        d_closest_point_dist_to_source[d_idx] = 4. * d_initial_spacing0[0]
+        d_closest_point_dist_to_source[d_idx] = 4. * d_spacing0[0]
         d_vx_source[d_idx] = 0.
         d_vy_source[d_idx] = 0.
         d_vz_source[d_idx] = 0.
@@ -1462,10 +1462,10 @@ class ComputeContactForce(Equation):
                   d_ti_x,
                   d_ti_y,
                   d_ti_z,
-                  d_initial_spacing0,
+                  d_spacing0,
                   dt, t):
-        overlap = d_initial_spacing0[0] - d_contact_force_dist[d_idx]
-        if overlap > 0. and overlap != d_initial_spacing0[0]:
+        overlap = d_spacing0[0] - d_contact_force_dist[d_idx]
+        if overlap > 0. and overlap != d_spacing0[0]:
             d_overlap[d_idx] = overlap
             tmp = self.kr * overlap
 

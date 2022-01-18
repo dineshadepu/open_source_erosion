@@ -144,7 +144,7 @@ class RigidBodyNormallyImpactingWall(Application):
                                         constants={
                                            'E': 69 * 1e9,
                                            'poisson_ratio': 0.3,
-                                           'initial_spacing0': self.rigid_body_spacing
+                                           'spacing0': self.rigid_body_spacing
                                         })
         rigid_body.add_property('dem_id', type='int', data=dem_id)
         rigid_body.add_property('body_id', type='int', data=body_id)

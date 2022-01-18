@@ -14,7 +14,7 @@ from pysph.base.utils import get_particle_array
 from pysph.tools.geometry import (remove_overlap_particles)
 
 # from solid_mech import SetHIJForInsideParticles, GraySolidsScheme
-from gray_solid_mech import GraySolidsSchemeSolidErosion
+from solid_mech import SolidsScheme
 from solid_mech_common import (setup_johnson_cook_parameters,
                                setup_damage_parameters,
                                get_youngs_mod_from_K_G,
@@ -26,7 +26,7 @@ from pysph.sph.scheme import add_bool_argument
 from pysph.solver.utils import load, get_files
 from pysph.sph.solid_mech.basic import (get_speed_of_sound, get_bulk_mod,
                                         get_shear_modulus)
-from pysph.tools.geometry import get_2d_block
+from pysph.tools.geometry import get_2d_block, rotate
 
 import matplotlib
 
@@ -67,6 +67,21 @@ class TestSolidErosion1(Application):
         self.artificial_vis_beta = 0.0
 
         self.seval = None
+
+        # edac constants
+        self.edac_alpha = 0.5
+        self.edac_nu = self.edac_alpha * self.c0 * self.h / 8
+
+        # attributes for Sun PST technique
+        self.u_f = 0.059
+        self.u_max = self.u_f * self.c0
+
+        # this is manually taken by running one simulation
+        self.u_max = 50
+        self.mach_no = self.u_max / self.c0
+
+        # attributes for IPST technique
+        self.ipst_max_iterations = 10
 
         # boundary equations
         self.boundary_equations_1 = get_boundary_identification_etvf_equations(
@@ -127,6 +142,9 @@ class TestSolidErosion1(Application):
                                         'jc_model': 1,
                                         'damage_model': 1
                                     })
+        dem_id = np.ones(len(target.x), dtype=int) * 0.
+        target.add_property('dem_id', type='int', data=dem_id)
+        target.add_constant('total_no_bodies', [2])
 
         x, y = get_2d_block(self.dx, self.target_length + 6. * self.dx,
                             self.target_height + 6. * self.dx)
@@ -164,6 +182,7 @@ class TestSolidErosion1(Application):
 
         # Create rigid body
         xc, yc, body_id = self.create_rigid_body()
+        xc, yc, _zs = rotate(xc, yc, np.zeros(len(xc)), axis=np.array([0., 0., 1.]), angle=45.)
         yc += max(target.y) - min(yc) + 4. * self.dx
         dem_id = body_id
         m = self.rigid_body_rho * self.rigid_body_spacing**2
@@ -179,17 +198,24 @@ class TestSolidErosion1(Application):
                                         constants={
                                             'E': 69 * 1e9,
                                             'poisson_ratio': 0.3,
+                                            'spacing0': self.dx,
                                         })
+        dem_id = np.ones(len(rigid_body.x), dtype=int)
+        body_id = np.zeros(len(rigid_body.x), dtype=int)
         rigid_body.add_property('dem_id', type='int', data=dem_id)
         rigid_body.add_property('body_id', type='int', data=body_id)
-        rigid_body.add_constant('max_tng_contacts_limit', 10)
+        rigid_body.add_constant('total_no_bodies', [2])
 
         self.scheme.setup_properties([target, target_wall, rigid_body])
 
+        rigid_body.add_property('contact_force_is_boundary')
+        rigid_body.contact_force_is_boundary[:] = rigid_body.is_boundary[:]
+
         vel = 5
+        angle = np.pi/2.
         self.scheme.scheme.set_linear_velocity(
-            rigid_body, np.array([vel * cos(np.pi/4),
-                                  -vel * sin(np.pi/4), 0.]))
+            rigid_body, np.array([vel * cos(angle),
+                                  -vel * sin(angle), 0.]))
 
         # self.scheme.scheme.set_angular_velocity(
         #     rigid_body, np.array([0.0, 0.0, 10.]))
@@ -222,15 +248,21 @@ class TestSolidErosion1(Application):
                                      output_at_times=output)
 
     def create_scheme(self):
-        gray = GraySolidsSchemeSolidErosion(
-            solids=['target'],
-            boundaries=['target_wall'],
-            rigid_bodies=['rigid_body'],
-            dim=2,
-            artificial_vis_alpha=self.artificial_vis_alpha,
-            artificial_vis_beta=self.artificial_vis_beta)
+        solid = SolidsScheme(solids=['target'],
+                             boundaries=['target_wall'],
+                             rigid_bodies=['rigid_body'],
+                             dim=2,
+                             pb=self.pb,
+                             edac_nu=self.edac_nu,
+                             u_max=self.u_max,
+                             mach_no=self.mach_no,
+                             ipst_max_iterations=self.ipst_max_iterations,
+                             h=self.h,
+                             hdx=self.hdx,
+                             artificial_vis_alpha=self.artificial_vis_alpha,
+                             artificial_vis_beta=self.artificial_vis_beta)
 
-        s = SchemeChooser(default='gray', gray=gray)
+        s = SchemeChooser(default='solid', solid=solid)
         return s
 
     def _make_accel_eval(self, equations, pa_arrays):
