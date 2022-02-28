@@ -18,6 +18,7 @@ from pysph.base.utils import (get_particle_array)
 
 from rigid_body_3d import RigidBody3DScheme
 from pysph.sph.equation import Equation, Group
+import os
 
 from pysph.tools.geometry import get_2d_block, get_2d_tank, rotate
 
@@ -374,41 +375,41 @@ class Mohseni2021FreeSlidingOnASlope(Application):
     #                 pa.fx[np.where(pa.force_idx_ft == 1)] += pa.tmp_tangential_force[0]
 
     def post_process(self, fname):
-        from pysph.solver.utils import iter_output, load
-        import os
-        from matplotlib import pyplot as plt
+        import matplotlib.pyplot as plt
+        from matplotlib.patches import Rectangle
+        from pysph.solver.utils import load, get_files
 
-        info = self.read_info(fname)
-        files = self.output_files
+        output_files = get_files(os.path.dirname(fname))
 
-        data = load(files[0])
-        arrays = data['arrays']
+        from pysph.solver.utils import iter_output
+
         t, velocity = [], []
 
-        for sd, rb in iter_output(files[::1], 'rigid_body'):
+        for sd, rb in iter_output(output_files[::1], 'rigid_body'):
             _t = sd['t']
             t.append(_t)
             vel = (rb.vcm[0]**2. + rb.vcm[1]**2. + rb.vcm[2]**2.)**0.5
             velocity.append(vel)
 
         # analytical data
-        t_analytical = np.array([0., 2.989])
-        v_analytical = np.array([0., 9.628])
-        if self.options.fric_coeff == 0.2:
-            t_analytical = np.array([0., 2.989])
-            v_analytical = np.array([0., 9.628])
+        theta = np.pi / 6.
+        t_analytical = np.linspace(0., max(t), 100)
+        v_analytical = (np.sin(theta) - self.options.fric_coeff * np.cos(theta)) * 9.81 * np.asarray(t_analytical)
 
-        elif self.options.fric_coeff == 0.4:
-            t_analytical = np.array([0., 3.1393323271673674])
-            v_analytical = np.array([0., 4.745746192173761])
+        if self.options.fric_coeff > np.tan(theta):
+            v_analytical = 0. * np.asarray(t_analytical)
 
-        elif self.options.fric_coeff == np.tan(np.pi/6):
-            t_analytical = np.array([0., 3.0])
-            v_analytical = np.array([0., 0.])
+        if 'info' in fname:
+            res = os.path.join(os.path.dirname(fname), "results.npz")
+        else:
+            res = os.path.join(fname, "results.npz")
 
-        elif self.options.fric_coeff > np.tan(np.pi/6):
-            t_analytical = np.array([0., 3.0])
-            v_analytical = np.array([0., 0.])
+        np.savez(res,
+                 t=t,
+                 velocity_rbd=velocity,
+
+                 t_analytical=t_analytical,
+                 v_analytical=v_analytical)
 
         plt.clf()
         plt.plot(t, velocity, "-", label='Mohsen')
