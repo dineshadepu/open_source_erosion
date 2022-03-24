@@ -523,6 +523,63 @@ class Rushdie2019TaylorImpactTest3DPart1(Problem):
         plt.close()
 
 
+class TestSolidErosion1(Problem):
+    def get_name(self):
+        return 'test_solid_erosion_1'
+
+    def setup(self):
+        get_path = self.input_path
+
+        cmd = 'python code/test_solid_erosion_1.py' + backend
+
+        # Base case info
+        self.case_info = {
+            'case_1': (dict(
+
+                pfreq=50,
+                ), 'Case 1'),
+        }
+
+        self.cases = [
+            Simulation(get_path(name), cmd,
+                       job_info=dict(n_core=n_core,
+                                     n_thread=n_thread), cache_nnps=None,
+                       **scheme_opts(self.case_info[name][0]))
+            for name in self.case_info
+        ]
+
+    def run(self):
+        self.make_output_dir()
+
+
+class Dong2016CaseASquareParticleOnAl6061T6(Problem):
+    def get_name(self):
+        return 'dong_2016_4_1_case_A_1_square_particle_erosion_on_al6061_t6'
+
+    def setup(self):
+        get_path = self.input_path
+
+        cmd = 'python code/dong_2016_4_1_case_A_1_square_particle_erosion_on_al6061_t6.py' + backend
+
+        # Base case info
+        self.case_info = {
+            'case_1': (dict(
+                pfreq=300,
+                ), 'Case 1'),
+        }
+
+        self.cases = [
+            Simulation(get_path(name), cmd,
+                       job_info=dict(n_core=n_core,
+                                     n_thread=n_thread), cache_nnps=None,
+                       **scheme_opts(self.case_info[name][0]))
+            for name in self.case_info
+        ]
+
+    def run(self):
+        self.make_output_dir()
+
+
 if __name__ == '__main__':
     PROBLEMS = [TestRigidBodyCollision1,
                 Mohseni2021ControlledSlidingOnAFlatSurface,
@@ -530,7 +587,10 @@ if __name__ == '__main__':
                 Mohseni2021FreeSlidingOnASlopeChallengingGeometry,
 
                 Shuangshuang2021TaylorImpactTest3D,
-                Rushdie2019TaylorImpactTest3DPart1]
+                Rushdie2019TaylorImpactTest3DPart1,
+
+                TestSolidErosion1,
+    ]
 
     automator = Automator(
         simulation_dir='outputs',

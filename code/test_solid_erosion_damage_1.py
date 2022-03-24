@@ -140,7 +140,6 @@ class TestSolidErosion1(Application):
         hdx = self.hdx
         m = self.rho0 * dx * dx
         h = np.ones_like(x) * hdx * dx
-        rad_s = self.dx / 2.
         rho = self.rho0
 
         target = get_particle_array(x=x,
@@ -151,7 +150,6 @@ class TestSolidErosion1(Application):
                                     E=self.E,
                                     nu=self.nu,
                                     rho_ref=self.rho0,
-                                    rad_s=rad_s,
                                     name="target",
                                     constants={
                                         'n': 4,
@@ -265,6 +263,10 @@ class TestSolidErosion1(Application):
             damage_3=self.target_damage_3,
             damage_4=self.target_damage_4,
             damage_5=self.target_damage_5)
+
+        # set damage properties
+        fltr = ((target.x > -5 * 1e-3) & (target.x < 5 * 1e-3)) & (target.y > 6 * 1e-3)
+        target.is_damaged[fltr[:]] = 1.
 
         return [target, target_wall, rigid_body]
 

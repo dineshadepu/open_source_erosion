@@ -424,6 +424,78 @@ class Mohseni2021FreeSlidingOnASlope(Application):
         # ========================
         # x amplitude figure
         # ========================
+        # generate plots
+        i = 0
+        output_files = get_files(fname)
+        output_times = np.array([0., 5 * 1e-1, 1. * 1e-0,  2. * 1e-0])
+
+        for sd, body, wall in iter_output(output_files, 'rigid_body', 'wall'):
+            _t = sd['t']
+            # if _t in output_times:
+            if _t in output_times:
+                s = 0.2
+                # print(_t)
+                fig, axs = plt.subplots(1, 1)
+                axs.scatter(body.x, body.y, s=s, c=body.m)
+                # axs.grid()
+                axs.set_aspect('equal', 'box')
+                # axs.set_title('still a circle, auto-adjusted data limits', fontsize=10)
+
+                # get the maximum and minimum of the geometry
+                x_min = min(body.x) - self.body_height
+                x_max = max(body.x) + 3. * self.body_height
+                y_min = min(body.y) - 4. * self.body_height
+                y_max = max(body.y) + 1. * self.body_height
+
+                filtr_1 = ((wall.x >= x_min) & (wall.x <= x_max)) & (
+                    (wall.y >= y_min) & (wall.y <= y_max))
+                wall_x = wall.x[filtr_1]
+                wall_y = wall.y[filtr_1]
+                wall_m = wall.m[filtr_1]
+
+                tmp = axs.scatter(wall_x, wall_y, s=s, c=wall_m)
+
+                # save the figure
+                figname = os.path.join(os.path.dirname(fname), "time" + str(i) + ".png")
+                fig.savefig(figname, dpi=300)
+                # plt.show()
+                i = i + 1
+
+        # =======================================
+        # =======================================
+        # Schematic
+        # =======================================
+        files = self.output_files
+        for sd, body, wall in iter_output(files[0:2], 'rigid_body', 'wall'):
+            _t = sd['t']
+            if _t == 0.:
+                s = 0.3
+                # print(_t)
+                fig, axs = plt.subplots(1, 1)
+                axs.scatter(body.x, body.y, s=s, c=body.m)
+                # axs.grid()
+                axs.set_aspect('equal', 'box')
+                # axs.set_title('still a circle, auto-adjusted data limits', fontsize=10)
+
+                # im_ratio = tmp.shape[0]/tmp.shape[1]
+                x_min = min(body.x) - self.body_height
+                x_max = max(body.x) + 3. * self.body_height
+                y_min = min(body.y) - 4. * self.body_height
+                y_max = max(body.y) + 1. * self.body_height
+
+                filtr_1 = ((wall.x >= x_min) & (wall.x <= x_max)) & (
+                    (wall.y >= y_min) & (wall.y <= y_max))
+                wall_x = wall.x[filtr_1]
+                wall_y = wall.y[filtr_1]
+                wall_m = wall.m[filtr_1]
+                tmp = axs.scatter(wall_x, wall_y, s=s, c=wall_m)
+                axs.axis('off')
+                axs.set_xticks([])
+                axs.set_yticks([])
+
+                # save the figure
+                figname = os.path.join(os.path.dirname(fname), "pre_schematic.png")
+                fig.savefig(figname, dpi=300)
 
 
 if __name__ == '__main__':

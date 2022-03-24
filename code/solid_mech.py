@@ -34,7 +34,7 @@ from pysph.sph.integrator import Integrator
 
 import numpy as np
 from math import sqrt, acos
-from math import pi as M_PI
+from math import pi as M_PI, exp
 
 
 def get_nu_from_G_K(G, K):
@@ -1470,7 +1470,9 @@ class SolidMechStep(IntegratorStep):
 
     def stage2(self, d_idx, d_uhat, d_vhat, d_what, d_x, d_y, d_z, d_rho,
                d_arho, d_s00, d_s01, d_s02, d_s11, d_s12, d_s22, d_as00,
-               d_as01, d_as02, d_as11, d_as12, d_as22, d_sigma00, d_sigma01,
+               d_eps00, d_eps01, d_eps02, d_eps11, d_eps12, d_eps22, d_aeps00,
+               d_aeps01, d_aeps02, d_aeps11, d_aeps12, d_aeps22, d_as01,
+               d_as02, d_as11, d_as12, d_as22, d_sigma00, d_sigma01,
                d_sigma02, d_sigma11, d_sigma12, d_sigma22, d_p, dt):
         d_x[d_idx] += dt * d_uhat[d_idx]
         d_y[d_idx] += dt * d_vhat[d_idx]
@@ -1483,6 +1485,14 @@ class SolidMechStep(IntegratorStep):
         d_s11[d_idx] = d_s11[d_idx] + dt * d_as11[d_idx]
         d_s12[d_idx] = d_s12[d_idx] + dt * d_as12[d_idx]
         d_s22[d_idx] = d_s22[d_idx] + dt * d_as22[d_idx]
+
+        # update strain  components
+        d_eps00[d_idx] = d_eps00[d_idx] + dt * d_aeps00[d_idx]
+        d_eps01[d_idx] = d_eps01[d_idx] + dt * d_aeps01[d_idx]
+        d_eps02[d_idx] = d_eps02[d_idx] + dt * d_aeps02[d_idx]
+        d_eps11[d_idx] = d_eps11[d_idx] + dt * d_aeps11[d_idx]
+        d_eps12[d_idx] = d_eps12[d_idx] + dt * d_aeps12[d_idx]
+        d_eps22[d_idx] = d_eps22[d_idx] + dt * d_aeps22[d_idx]
 
         # update sigma
         d_sigma00[d_idx] = d_s00[d_idx] - d_p[d_idx]
@@ -1504,9 +1514,11 @@ class SolidMechStep(IntegratorStep):
 class SolidMechStepEDAC(SolidMechStep):
     """This step follows GTVF paper by Zhang 2017"""
     def stage2(self, d_idx, d_m, d_uhat, d_vhat, d_what, d_x, d_y, d_z, d_rho,
-               d_arho, d_s00, d_s01, d_s02, d_s11, d_s12, d_s22, d_as00,
-               d_as01, d_as02, d_as11, d_as12, d_as22, d_sigma00, d_sigma01,
-               d_sigma02, d_sigma11, d_sigma12, d_sigma22, d_p, d_ap, dt):
+               d_arho, d_s00, d_s01, d_s02, d_s11, d_s12, d_s22, d_as00, d_as01,
+               d_as02, d_as11, d_as12, d_as22, d_sigma00, d_sigma01, d_sigma02,
+               d_sigma11, d_sigma12, d_sigma22, d_eps00, d_eps01, d_eps02,
+               d_eps11, d_eps12, d_eps22, d_aeps00, d_aeps01, d_aeps02,
+               d_aeps11, d_aeps12, d_aeps22, d_p, d_ap, dt):
         d_x[d_idx] += dt * d_uhat[d_idx]
         d_y[d_idx] += dt * d_vhat[d_idx]
         d_z[d_idx] += dt * d_what[d_idx]
@@ -1518,6 +1530,14 @@ class SolidMechStepEDAC(SolidMechStep):
         d_s11[d_idx] = d_s11[d_idx] + dt * d_as11[d_idx]
         d_s12[d_idx] = d_s12[d_idx] + dt * d_as12[d_idx]
         d_s22[d_idx] = d_s22[d_idx] + dt * d_as22[d_idx]
+
+        # update strain  components
+        d_eps00[d_idx] = d_eps00[d_idx] + dt * d_aeps00[d_idx]
+        d_eps01[d_idx] = d_eps01[d_idx] + dt * d_aeps01[d_idx]
+        d_eps02[d_idx] = d_eps02[d_idx] + dt * d_aeps02[d_idx]
+        d_eps11[d_idx] = d_eps11[d_idx] + dt * d_aeps11[d_idx]
+        d_eps12[d_idx] = d_eps12[d_idx] + dt * d_aeps12[d_idx]
+        d_eps22[d_idx] = d_eps22[d_idx] + dt * d_aeps22[d_idx]
 
         # update sigma
         d_sigma00[d_idx] = d_s00[d_idx] - d_p[d_idx]
@@ -1533,49 +1553,24 @@ class SolidMechStepEDAC(SolidMechStep):
 
 
 class SolidMechStepErosion(SolidMechStep):
-    """This step follows GTVF paper by Zhang 2017"""
+    """This step follows GTVF paper by Zhang 2017
+
+    Also the stepper algorithm provided by "Frissane 2019 - 3D smoothed particle
+    hydrodynamics modeling for high"
+
+    """
     def stage2(self, d_idx, d_m, d_uhat, d_vhat, d_what, d_x, d_y, d_z, d_rho,
-               d_arho, d_s00, d_s01, d_s02, d_s11, d_s12, d_s22, d_as00,
-               d_as01, d_as02, d_as11, d_as12, d_as22, d_sigma00, d_sigma01,
-               d_sigma02, d_sigma11, d_sigma12, d_sigma22, d_p, d_e,
-               d_ae, d_T, d_G, d_specific_heat, d_JC_T_room,
-               d_eff_plastic_strain, d_plastic_strain_rate, d_JC_A, d_JC_B,
-               d_JC_n, d_JC_C, d_JC_psr_0, d_JC_T_melt, d_JC_m,
-               d_yield_stress, d_damage_1, d_damage_2, d_damage_3,
-               d_damage_4, d_damage_5, d_epsilon_failure, d_damage_D, dt):
-        # find the Johnson Cook yield stress value
-        # compute yield stress (sigma_y)
-        # 2. A smoothed particle hydrodynamics (SPH) model for simulating
-        # surface erosion by impacts of foreign particles, by X.W. Dong
-        eps = d_eff_plastic_strain[d_idx]
-        psr = d_plastic_strain_rate[d_idx]
-        term_1 = (d_JC_A[0] + d_JC_B[0] * eps**d_JC_n[0])
-        term_2 = (1 + d_JC_C[0] * log(psr / d_JC_psr_0[0]))
-        # equation 25 of [2]
-        t_room = d_JC_T_room[0]
-        # normalized temperature T^*
-        # equation 24 of [2]
-        t_star = (d_T[d_idx] - t_room) / (d_JC_T_melt[0] - t_room)
-        term_3 = (1. - t_star**d_JC_m[0])
-        d_yield_stress[d_idx] = term_1 * term_2 * term_3
-
-        # Strain failure (Equation 27 Dong2016)
-        D1 = d_damage_1[0]
-        D2 = d_damage_2[0]
-        D3 = d_damage_3[0]
-        D4 = d_damage_4[0]
-        D5 = d_damage_5[0]
-
-        # term_1 = (D1 + D2 * exp(D3 * sigma_star))
-        # term_2 = (1 + D4 * log(psr / d_JC_psr_0[0]))
-        # # equation 25 of [2]
-        # t_room = d_JC_T_room[0]
-        # # normalized temperature T^*
-        # # equation 24 of [2]
-        # t_star = (d_T[d_idx] - t_room) / (d_JC_T_melt[0] - t_room)
-        # term_3 = (1. + D5 * t_star)
-        # d_epsilon_failure[d_idx] = term_1 * term_2 * term_3
-
+               d_arho, d_s00, d_s01, d_s02, d_s11, d_s12, d_s22, d_as00, d_as01,
+               d_as02, d_as11, d_as12, d_as22, d_sigma00, d_sigma01, d_sigma02,
+               d_sigma11, d_sigma12, d_sigma22, d_eps00, d_eps01, d_eps02,
+               d_eps11, d_eps12, d_eps22, d_aeps00, d_aeps01, d_aeps02,
+               d_aeps11, d_aeps12, d_aeps22, d_p, d_e, d_ae, d_T, d_G,
+               d_specific_heat, d_JC_T_room, d_eff_plastic_strain,
+               d_plastic_strain_rate, d_JC_A, d_JC_B, d_JC_n, d_JC_C,
+               d_JC_psr_0, d_JC_T_melt, d_JC_m, d_yield_stress, d_damage_1,
+               d_damage_2, d_damage_3, d_damage_4, d_damage_5,
+               d_epsilon_failure, d_damage_D, d_is_damaged, d_f_y, d_sij_star,
+               dt):
         # Update the positions
         d_x[d_idx] += dt * d_uhat[d_idx]
         d_y[d_idx] += dt * d_vhat[d_idx]
@@ -1591,6 +1586,14 @@ class SolidMechStepErosion(SolidMechStep):
         d_e[d_idx] += dt * d_ae[d_idx]
         d_T[d_idx] = d_e[d_idx] / d_specific_heat[0] + d_JC_T_room[0]
 
+        # update strain  components
+        d_eps00[d_idx] = d_eps00[d_idx] + dt * d_aeps00[d_idx]
+        d_eps01[d_idx] = d_eps01[d_idx] + dt * d_aeps01[d_idx]
+        d_eps02[d_idx] = d_eps02[d_idx] + dt * d_aeps02[d_idx]
+        d_eps11[d_idx] = d_eps11[d_idx] + dt * d_aeps11[d_idx]
+        d_eps12[d_idx] = d_eps12[d_idx] + dt * d_aeps12[d_idx]
+        d_eps22[d_idx] = d_eps22[d_idx] + dt * d_aeps22[d_idx]
+
         # update deviatoric stress components
         s00_star = d_s00[d_idx] + dt * d_as00[d_idx]
         s01_star = d_s01[d_idx] + dt * d_as01[d_idx]
@@ -1599,42 +1602,105 @@ class SolidMechStepErosion(SolidMechStep):
         s12_star = d_s12[d_idx] + dt * d_as12[d_idx]
         s22_star = d_s22[d_idx] + dt * d_as22[d_idx]
 
-        # sij_sij = (
-        #     s00_star * s00_star + s01_star * s01_star +
-        #     s02_star * s02_star + s01_star * s01_star +
-        #     s11_star * s11_star + s12_star * s12_star +
-        #     s02_star * s02_star + s12_star * s12_star +
-        #     s22_star * s22_star)
-        # s_star = sqrt(3./2. * sij_sij)
+        # ========================================
+        # find the Johnson Cook yield stress value
+        # ========================================
+        # # compute yield stress (sigma_y)
+        # # 2. A smoothed particle hydrodynamics (SPH) model for simulating
+        # # surface erosion by impacts of foreign particles, by X.W. Dong
+        eps = d_eff_plastic_strain[d_idx]
+        psr = d_plastic_strain_rate[d_idx]
+        term_1 = (d_JC_A[0] + d_JC_B[0] * eps**d_JC_n[0])
+        term_2 = 1.
+        tmp_term_2 = psr / d_JC_psr_0[0]
 
-        # f_y = 1.
-        # if s_star > 1e-12:
-        #     f_y = min(d_yield_stress[d_idx] / s_star, 1.)
+        if tmp_term_2 > 1e-12:
+            term_2 = (1 + d_JC_C[0] * log(tmp_term_2))
 
-        # # Deviatoric stress is updated
-        # d_s00[d_idx] = f_y * s00_star
-        # d_s01[d_idx] = f_y * s01_star
-        # d_s02[d_idx] = f_y * s02_star
-        # d_s11[d_idx] = f_y * s11_star
-        # d_s12[d_idx] = f_y * s12_star
-        # d_s22[d_idx] = f_y * s22_star
+        # equation 25 of [2]
+        t_room = d_JC_T_room[0]
+        # normalized temperature T^*
+        # equation 24 of [2]
+        t_star = (d_T[d_idx] - t_room) / (d_JC_T_melt[0] - t_room)
+        if t_star > 0.:
+            term_3 = (1. - t_star**d_JC_m[0])
+        else:
+            term_3 = 1.
+        d_yield_stress[d_idx] = term_1 * term_2 * term_3
 
-        # # Find the plastic strain increment
-        # delta_eps = 1. / 3. * (1. - f_y) / d_G[d_idx] * s_star
-        # d_eff_plastic_strain[d_idx] += delta_eps
+        sij_sij = (
+            s00_star * s00_star + s01_star * s01_star +
+            s02_star * s02_star + s01_star * s01_star +
+            s11_star * s11_star + s12_star * s12_star +
+            s02_star * s02_star + s12_star * s12_star +
+            s22_star * s22_star)
+        s_star = sqrt(3./2. * sij_sij)
+        d_sij_star[d_idx] = s_star
 
-        # # Compute the damage D (eq 26 Dong2016)
-        # d_damage_D[d_idx] = (d_eff_plastic_strain[d_idx] /
-        #                      d_epsilon_failure[d_idx])
-        # if d_damage_D[d_idx] > 1.:
-        #     d_s00[d_idx] = 0.
-        #     d_s01[d_idx] = 0.
-        #     d_s02[d_idx] = 0.
-        #     d_s11[d_idx] = 0.
-        #     d_s12[d_idx] = 0.
-        #     d_s22[d_idx] = 0.
+        f_y = 1.
+        if s_star > 1e-12:
+            f_y = min(d_yield_stress[d_idx] / s_star, 1.)
+
+        d_f_y[d_idx] = f_y
+
+        # Deviatoric stress is updated
+        d_s00[d_idx] = f_y * s00_star
+        d_s01[d_idx] = f_y * s01_star
+        d_s02[d_idx] = f_y * s02_star
+        d_s11[d_idx] = f_y * s11_star
+        d_s12[d_idx] = f_y * s12_star
+        d_s22[d_idx] = f_y * s22_star
+
+        # Find the plastic strain increment
+        delta_eps = 1. / 3. * (1. - f_y) / d_G[d_idx] * s_star
+        d_eff_plastic_strain[d_idx] += delta_eps
+
+        # Strain failure (Equation 27 Dong2016)
+        D1 = d_damage_1[0]
+        D2 = d_damage_2[0]
+        D3 = d_damage_3[0]
+        D4 = d_damage_4[0]
+        D5 = d_damage_5[0]
+
+        # sigma_star = -d_p[d_idx]
+        sigma_star = 1.  # fixme
+        term_1 = (D1 + D2 * exp(D3 * sigma_star))
+        term_2 = 1.
+        tmp_term_2 = psr / d_JC_psr_0[0]
+        if tmp_term_2 > 1e-12:
+            term_2 = (1 + D4 * log(tmp_term_2))
+
+        # equation 25 of [2]
+        t_room = d_JC_T_room[0]
+        # normalized temperature T^*
+        # equation 24 of [2]
+        t_star = (d_T[d_idx] - t_room) / (d_JC_T_melt[0] - t_room)
+        term_3 = (1. + D5 * t_star)
+        d_epsilon_failure[d_idx] = term_1 * term_2 * term_3
+
+        if d_is_damaged[d_idx] == 0.:
+            # Compute the damage D (eq 26 Dong2016)
+            d_damage_D[d_idx] = abs(d_eff_plastic_strain[d_idx] /
+                                    d_epsilon_failure[d_idx])
+            if d_damage_D[d_idx] > 1.:
+                d_is_damaged[d_idx] = 1.
+        else:
+            d_s00[d_idx] = 0.
+            d_s01[d_idx] = 0.
+            d_s02[d_idx] = 0.
+            d_s11[d_idx] = 0.
+            d_s12[d_idx] = 0.
+            d_s22[d_idx] = 0.
 
         # update sigma
+        # update deviatoric stress components
+        # d_s00[d_idx] = d_s00[d_idx] + dt * d_as00[d_idx]
+        # d_s01[d_idx] = d_s01[d_idx] + dt * d_as01[d_idx]
+        # d_s02[d_idx] = d_s02[d_idx] + dt * d_as02[d_idx]
+        # d_s11[d_idx] = d_s11[d_idx] + dt * d_as11[d_idx]
+        # d_s12[d_idx] = d_s12[d_idx] + dt * d_as12[d_idx]
+        # d_s22[d_idx] = d_s22[d_idx] + dt * d_as22[d_idx]
+
         d_sigma00[d_idx] = d_s00[d_idx] - d_p[d_idx]
         d_sigma01[d_idx] = d_s01[d_idx]
         d_sigma02[d_idx] = d_s02[d_idx]
@@ -1720,6 +1786,152 @@ class MakeAuhatZero(Equation):
         d_awhat[d_idx] = 0.
 
 
+class HookesDeviatoricStressRateWithStrainTrace(Equation):
+    r""" **Rate of change of stress **
+
+    .. math::
+        \frac{dS^{ij}}{dt} = 2\mu\left(\epsilon^{ij} - \frac{1}{3}\delta^{ij}
+        \epsilon^{ij}\right) + S^{ik}\Omega^{jk} + \Omega^{ik}S^{kj}
+
+    where
+
+    .. math::
+
+        \epsilon^{ij} = \frac{1}{2}\left(\frac{\partial v^i}{\partial x^j} +
+        \frac{\partial v^j}{\partial x^i}\right)\\
+
+        \Omega^{ij} = \frac{1}{2}\left(\frac{\partial v^i}{\partial x^j} -
+           \frac{\partial v^j}{\partial x^i} \right)
+
+    """
+
+    def initialize(self, d_idx, d_as00, d_as01, d_as02, d_as11, d_as12,
+                   d_as22, d_aeps00, d_aeps01, d_aeps02, d_aeps11, d_aeps12,
+                   d_aeps22):
+        d_as00[d_idx] = 0.0
+        d_as01[d_idx] = 0.0
+        d_as02[d_idx] = 0.0
+
+        d_as11[d_idx] = 0.0
+        d_as12[d_idx] = 0.0
+
+        d_as22[d_idx] = 0.0
+
+        d_aeps00[d_idx] = 0.0
+        d_aeps01[d_idx] = 0.0
+        d_aeps02[d_idx] = 0.0
+
+        d_aeps11[d_idx] = 0.0
+        d_aeps12[d_idx] = 0.0
+
+        d_aeps22[d_idx] = 0.0
+
+    def loop(self, d_idx, d_s00, d_s01, d_s02, d_s11, d_s12, d_s22, d_v00,
+             d_v01, d_v02, d_v10, d_v11, d_v12, d_v20, d_v21, d_v22, d_as00,
+             d_as01, d_as02, d_as11, d_as12, d_as22, d_aeps00, d_aeps01,
+             d_aeps02, d_aeps11, d_aeps12, d_aeps22, d_plastic_strain_rate,
+             d_G):
+
+        v00 = d_v00[d_idx]
+        v01 = d_v01[d_idx]
+        v02 = d_v02[d_idx]
+
+        v10 = d_v10[d_idx]
+        v11 = d_v11[d_idx]
+        v12 = d_v12[d_idx]
+
+        v20 = d_v20[d_idx]
+        v21 = d_v21[d_idx]
+        v22 = d_v22[d_idx]
+
+        s00 = d_s00[d_idx]
+        s01 = d_s01[d_idx]
+        s02 = d_s02[d_idx]
+
+        s10 = d_s01[d_idx]
+        s11 = d_s11[d_idx]
+        s12 = d_s12[d_idx]
+
+        s20 = d_s02[d_idx]
+        s21 = d_s12[d_idx]
+        s22 = d_s22[d_idx]
+
+        # strain rate tensor is symmetric
+        eps00 = v00
+        eps01 = 0.5 * (v01 + v10)
+        eps02 = 0.5 * (v02 + v20)
+
+        eps10 = eps01
+        eps11 = v11
+        eps12 = 0.5 * (v12 + v21)
+
+        eps20 = eps02
+        eps21 = eps12
+        eps22 = v22
+
+        d_aeps00[d_idx] = eps00
+        d_aeps01[d_idx] = eps01
+        d_aeps02[d_idx] = eps02
+        d_aeps11[d_idx] = eps11
+        d_aeps12[d_idx] = eps12
+        d_aeps22[d_idx] = eps22
+
+        # compute the plastic strain rate
+        Dij_Dij = (
+            eps00 * eps00 + eps01 * eps01 +
+            eps02 * eps02 + eps01 * eps01 +
+            eps11 * eps11 + eps12 * eps12 +
+            eps02 * eps02 + eps12 * eps12 +
+            eps22 * eps22)
+        d_plastic_strain_rate[d_idx] = sqrt(Dij_Dij)
+
+        # rotation tensor is asymmetric
+        omega00 = 0.0
+        omega01 = 0.5 * (v01 - v10)
+        omega02 = 0.5 * (v02 - v20)
+
+        omega10 = -omega01
+        omega11 = 0.0
+        omega12 = 0.5 * (v12 - v21)
+
+        omega20 = -omega02
+        omega21 = -omega12
+        omega22 = 0.0
+
+        tmp = 2.0 * d_G[0]
+        trace = 1.0 / 3.0 * (eps00 + eps11 + eps22)
+
+        # S_00
+        d_as00[d_idx] = tmp*( eps00 - trace ) + \
+                        ( s00*omega00 + s01*omega01 + s02*omega02) + \
+                        ( s00*omega00 + s10*omega01 + s20*omega02)
+
+        # S_01
+        d_as01[d_idx] = tmp*(eps01) + \
+                        ( s00*omega10 + s01*omega11 + s02*omega12) + \
+                        ( s01*omega00 + s11*omega01 + s21*omega02)
+
+        # S_02
+        d_as02[d_idx] = tmp*eps02 + \
+                        (s00*omega20 + s01*omega21 + s02*omega22) + \
+                        (s02*omega00 + s12*omega01 + s22*omega02)
+
+        # S_11
+        d_as11[d_idx] = tmp*( eps11 - trace ) + \
+                        (s10*omega10 + s11*omega11 + s12*omega12) + \
+                        (s01*omega10 + s11*omega11 + s21*omega12)
+
+        # S_12
+        d_as12[d_idx] = tmp*eps12 + \
+                        (s10*omega20 + s11*omega21 + s12*omega22) + \
+                        (s02*omega10 + s12*omega11 + s22*omega12)
+
+        # S_22
+        d_as22[d_idx] = tmp*(eps22 - trace) + \
+                        (s20*omega20 + s21*omega21 + s22*omega22) + \
+                        (s02*omega20 + s12*omega21 + s22*omega22)
+
+
 class SolidsScheme(Scheme):
     """
 
@@ -1761,7 +1973,7 @@ class SolidsScheme(Scheme):
     python file_name.py --edac --surface-p-zero $(rest_of_the_arguments)
 
     """
-    def __init__(self, solids, boundaries, dim, h, pb, edac_nu, u_max, mach_no,
+    def __init__(self, solids, boundaries, dim, h, pb, u_max, mach_no,
                  hdx, rigid_bodies=[], rigid_boundaries=[],
                  ipst_max_iterations=10,
                  ipst_min_iterations=0,
@@ -1770,7 +1982,7 @@ class SolidsScheme(Scheme):
                  use_uhat_cont=False, artificial_vis_alpha=1.0,
                  artificial_vis_beta=0.0, artificial_stress_eps=0.3,
                  continuity_tvf_correction=False,
-                 shear_stress_tvf_correction=False, kernel_choice="1",
+                 shear_stress_tvf_correction=False,
                  stiff_eos=False, gamma=7., pst="sun2019",
                  kr=1e8, kf=1e5, fric_coeff=0.0, gx=0., gy=0., gz=0.):
         self.solids = solids
@@ -1792,9 +2004,8 @@ class SolidsScheme(Scheme):
         self.artificial_stress_eps = artificial_stress_eps
 
         # TODO: kernel_fac will change with kernel. This should change
-        self.kernel_choice = "1"
         self.kernel = QuinticSpline
-        self.kernel_factor = 2
+        self.kernel_factor = 3
 
         self.use_uhat_cont = use_uhat_cont
         self.use_uhat_velgrad = use_uhat_velgrad
@@ -1809,9 +2020,7 @@ class SolidsScheme(Scheme):
         self.continuity_tvf_correction = continuity_tvf_correction
         self.shear_stress_tvf_correction = shear_stress_tvf_correction
 
-        self.edac_nu = edac_nu
         self.surf_p_zero = True
-        self.edac = False
 
         self.pst = pst
 
@@ -1828,6 +2037,7 @@ class SolidsScheme(Scheme):
         self.debug = False
 
         self.stiff_eos = stiff_eos
+        self.gruneisen_eos = False
         self.gamma = gamma
 
         # boundary conditions
@@ -1835,6 +2045,7 @@ class SolidsScheme(Scheme):
         self.no_slip = False
         self.free_slip = False
 
+        self.mohseni_contact_force = False
         self.kr = kr
         self.kf = kf
         self.fric_coeff = fric_coeff
@@ -1848,18 +2059,6 @@ class SolidsScheme(Scheme):
         self.attributes_changed()
 
     def add_user_options(self, group):
-        add_bool_argument(
-            group, 'surf-p-zero', dest='surf_p_zero', default=True,
-            help='Make the surface pressure and acceleration to be zero')
-
-        add_bool_argument(group, 'uhat-cont', dest='use_uhat_cont',
-                          default=False,
-                          help='Use Uhat in continuity equation')
-
-        add_bool_argument(group, 'uhat-velgrad', dest='use_uhat_velgrad',
-                          default=False,
-                          help='Use Uhat in velocity gradient computation')
-
         group.add_argument("--artificial-vis-alpha", action="store",
                            dest="artificial_vis_alpha", default=1.0,
                            type=float,
@@ -1868,71 +2067,15 @@ class SolidsScheme(Scheme):
         group.add_argument("--artificial-vis-beta", action="store",
                            dest="artificial_vis_beta", default=1.0, type=float,
                            help="Artificial viscosity coefficients, beta")
-
-        add_bool_argument(
-            group, 'continuity-tvf-correction',
-            dest='continuity_tvf_correction', default=True,
-            help='Add the extra continuty term arriving due to TVF')
-
-        add_bool_argument(
-            group, 'shear-stress-tvf-correction',
-            dest='shear_stress_tvf_correction', default=True,
-            help='Add the extra shear stress rate term arriving due to TVF')
-
-        add_bool_argument(group, 'edac', dest='edac', default=True,
-                          help='Use pressure evolution equation EDAC')
-
         add_bool_argument(group, 'adami-velocity-extrapolate',
                           dest='adami_velocity_extrapolate', default=False,
                           help='Use adami velocity extrapolation')
 
-        add_bool_argument(group, 'no-slip', dest='no_slip', default=False,
-                          help='No slip bc')
-
-        add_bool_argument(group, 'free-slip', dest='free_slip', default=False,
-                          help='Free slip bc')
-
-        choices = ['sun2019', 'ipst', 'gray', 'gtvf', 'none']
-        group.add_argument(
-            "--pst", action="store", dest='pst', default="sun2019",
-            choices=choices,
-            help="Specify what PST to use (one of %s)." % choices)
-
-        group.add_argument("--ipst-max-iterations", action="store",
-                           dest="ipst_max_iterations", default=10, type=int,
-                           help="Max iterations of IPST")
-
-        group.add_argument("--ipst-min-iterations", action="store",
-                           dest="ipst_min_iterations", default=5, type=int,
-                           help="Min iterations of IPST")
-
-        group.add_argument("--ipst-interval", action="store",
-                           dest="ipst_interval", default=1, type=int,
-                           help="Frequency at which IPST is to be done")
-
-        group.add_argument("--ipst-tolerance", action="store", type=float,
-                           dest="ipst_tolerance", default=None,
-                           help="Tolerance limit of IPST")
-
-        add_bool_argument(group, 'debug', dest='debug', default=False,
-                          help='Check if the IPST converged')
-
-        choices = ["1", "2", "3", "4", "5", "6", "7", "8"]
-        group.add_argument(
-            "--kernel-choice", action="store", dest='kernel_choice',
-            default="1", choices=choices,
-            help="""Specify what kernel to use (one of %s).
-                           1. QuinticSpline
-                           2. WendlandQuintic
-                           3. CubicSpline
-                           4. WendlandQuinticC4
-                           5. Gaussian
-                           6. SuperGaussian
-                           7. Gaussian
-                           8. Gaussian""" % choices)
-
         add_bool_argument(group, 'stiff-eos', dest='stiff_eos', default=False,
                           help='use stiff equation of state')
+
+        add_bool_argument(group, 'gruneisen-eos', dest='gruneisen_eos',
+                          default=False, help='Use Mie Gruneisen equation of state')
 
         group.add_argument("--kr-stiffness", action="store",
                            dest="kr", default=1e8,
@@ -1949,38 +2092,17 @@ class SolidsScheme(Scheme):
                            type=float,
                            help="Friction coefficient")
 
+        add_bool_argument(group, 'mohseni-contact-force', dest='mohseni_contact_force',
+                          default=False, help='Use Mohseni contact force')
+
     def consume_user_options(self, options):
         _vars = [
-            'surf_p_zero', 'use_uhat_cont', 'use_uhat_velgrad',
-            'artificial_vis_alpha', 'shear_stress_tvf_correction', 'edac',
-            'pst', 'debug', 'ipst_max_iterations', 'ipst_tolerance',
-            'ipst_interval', 'kernel_choice', 'stiff_eos',
-            'continuity_tvf_correction', 'adami_velocity_extrapolate',
-            'no_slip', 'free_slip', 'kr', 'kf', 'fric_coeff'
+            'artificial_vis_alpha',
+            'stiff_eos', 'gruneisen_eos',
+            'kr', 'kf', 'fric_coeff', 'mohseni_contact_force'
         ]
         data = dict((var, self._smart_getattr(options, var)) for var in _vars)
         self.configure(**data)
-
-    def attributes_changed(self):
-        if self.kernel_choice == "1":
-            self.kernel = QuinticSpline
-            self.kernel_factor = 3
-        elif self.kernel_choice == "2":
-            self.kernel = WendlandQuintic
-            self.kernel_factor = 2
-        elif self.kernel_choice == "3":
-            self.kernel = CubicSpline
-            self.kernel_factor = 2
-        elif self.kernel_choice == "4":
-            self.kernel = WendlandQuinticC4
-            self.kernel_factor = 2
-            self.h = self.h / self.hdx * 2.0
-        elif self.kernel_choice == "5":
-            self.kernel = Gaussian
-            self.kernel_factor = 3
-        elif self.kernel_choice == "6":
-            self.kernel = SuperGaussian
-            self.kernel_factor = 3
 
     def check_ipst_time(self, t, dt):
         if int(t / dt) % self.ipst_interval == 0:
@@ -2009,7 +2131,9 @@ class SolidsScheme(Scheme):
             ComputeContactForceNormals,
             ComputeContactForceDistanceAndClosestPoint,
             ComputeContactForce,
-            ComputeContactForceOnRigidBody)
+            ComputeContactForceOnRigidBody,
+            ContactForceDEMOnElasticBody,
+            ContactForceDEMOnRigidBody)
 
         from rigid_body_common import (BodyForce, SumUpExternalForces)
 
@@ -2043,37 +2167,13 @@ class SolidsScheme(Scheme):
         # =================================== #
 
         for solid in self.solids:
-            if self.use_uhat_cont is True:
-                g1.append(ContinuityEquationUhat(dest=solid, sources=[solid]+self.boundaries))
-            else:
-                g1.append(ContinuityEquation(dest=solid, sources=[solid]+self.boundaries))
+            g1.append(ContinuityEquation(dest=solid, sources=[solid]+self.boundaries))
 
-            if self.continuity_tvf_correction is True:
-                g1.append(
-                    ContinuityEquationETVFCorrection(dest=solid, sources=[solid]+self.boundaries))
+            g1.append(VelocityGradient2D(dest=solid, sources=[solid]+self.boundaries))
 
-            if self.use_uhat_velgrad is True:
-                if self.dim == 2:
-                    g1.append(VelocityGradient2DUhat(dest=solid, sources=[solid]+self.boundaries))
-                elif self.dim == 3:
-                    g1.append(VelocityGradient3DUhat(dest=solid, sources=[solid]+self.boundaries))
-            else:
-                if self.dim == 2:
-                    g1.append(VelocityGradient2D(dest=solid, sources=[solid]+self.boundaries))
-                elif self.dim == 3:
-                    g1.append(VelocityGradient3D(dest=solid, sources=[solid]+self.boundaries))
-
-            if self.shear_stress_tvf_correction is True:
-                g1.append(
-                    ComputeDivDeviatoricStressOuterVelocity(
-                        dest=solid, sources=[solid]))
-
-                g1.append(ComputeDivVelocity(dest=solid, sources=[solid]))
-
-            if self.pst == "gray":
-                g1.append(
-                    MonaghanArtificialStress(dest=solid, sources=None,
-                                             eps=self.artificial_stress_eps))
+            # g1.append(
+            #     MonaghanArtificialStress(dest=solid, sources=None,
+            #                                 eps=self.artificial_stress_eps))
 
         stage1.append(Group(equations=g1))
 
@@ -2082,22 +2182,9 @@ class SolidsScheme(Scheme):
         # --------------------
         g2 = []
         for solid in self.solids:
-            g2.append(HookesDeviatoricStressRate(dest=solid, sources=None))
+            g2.append(HookesDeviatoricStressRateWithStrainTrace(dest=solid, sources=None))
 
-            if self.shear_stress_tvf_correction is True:
-                g2.append(
-                    HookesDeviatoricStressRateETVFCorrection(
-                        dest=solid, sources=None))
         stage1.append(Group(equations=g2))
-
-        # edac pressure evolution equation
-        if self.edac is True:
-            gtmp = []
-            for solid in self.solids:
-                gtmp.append(
-                    EDACEquation(dest=solid, sources=[solid], nu=self.edac_nu))
-
-            stage1.append(Group(gtmp))
 
         # ------------------------
         # stage 2 equations starts
@@ -2120,51 +2207,22 @@ class SolidsScheme(Scheme):
                                                  sources=self.solids+self.boundaries))
             stage2.append(Group(g1))
 
-        if self.edac is False:
-            if self.pst in ["gray", "ipst", "sun2019"]:
-                for solid in self.solids:
-                    if self.stiff_eos is True:
-                        g2.append(
-                            StiffEOS(solid, sources=None, gamma=self.gamma))
-                    else:
-                        g2.append(IsothermalEOS(solid, sources=None))
+        for solid in self.solids:
+            if self.stiff_eos is True:
+                g2.append(
+                    StiffEOS(solid, sources=None, gamma=self.gamma))
+            else:
+                g2.append(IsothermalEOS(solid, sources=None))
 
-            elif self.pst == "gtvf":
-                for solid in self.solids:
-                    g2.append(GTVFEOS(solid, sources=None))
-
-            if len(g2) > 0:
-                stage2.append(Group(g2))
-        else:
-            if self.pst == "gtvf":
-                for solid in self.solids:
-                    g2.append(GTVFSetP0(solid, sources=None))
-
-                stage2.append(Group(g2))
-
-        # make the acceleration of pressure and pressure of boundary
-        # particles zero
-        if self.surf_p_zero is True:
-            g2_tmp = []
-            for pa in self.solids:
-                g2_tmp.append(
-                    MakeSurfaceParticlesPressureApZeroEDACUpdated(
-                        dest=pa, sources=None))
-
-            stage2.append(Group(equations=g2_tmp))
+        stage2.append(Group(g2))
 
         # -------------------
         # boundary conditions
         # -------------------
         for boundary in self.boundaries:
-            if self.free_slip is True:
-                g3.append(
-                    AdamiBoundaryConditionExtrapolateFreeSlip(
-                        dest=boundary, sources=self.solids))
-            else:
-                g3.append(
-                    AdamiBoundaryConditionExtrapolateNoSlip(
-                        dest=boundary, sources=self.solids))
+            g3.append(
+                AdamiBoundaryConditionExtrapolateNoSlip(
+                    dest=boundary, sources=self.solids))
         if len(g3) > 0:
             stage2.append(Group(g3))
 
@@ -2190,103 +2248,60 @@ class SolidsScheme(Scheme):
                     alpha=self.artificial_vis_alpha,
                     beta=self.artificial_vis_beta))
 
-            if self.pst == "sun2019":
-                g4.append(
-                    ComputeAuHatETVFSun2019Solid(
-                        dest=solid, sources=[solid] + self.boundaries,
-                        mach_no=self.mach_no, u_max=self.u_max))
-            elif self.pst == "gtvf":
-                g4.append(
-                    ComputeAuHatGTVF(dest=solid,
-                                     sources=[solid] + self.boundaries))
-
-            elif self.pst == "gray":
-                g4.append(
-                    MonaghanArtificialStressCorrection(dest=solid,
-                                                       sources=[solid]))
+            # g4.append(
+            #     MonaghanArtificialStressCorrection(dest=solid,
+            #                                        sources=[solid]))
 
             tmp_list = self.solids.copy()
             tmp_list.remove(solid)
 
         stage2.append(Group(g4))
 
-        # this PST is handled separately
-        if self.pst == "ipst":
-            g5 = []
-            g6 = []
-            g7 = []
-            g8 = []
-
-            # make auhat zero before computation of ipst force
-            eqns = []
-            for solid in self.solids:
-                eqns.append(MakeAuhatZero(dest=solid, sources=None))
-
-            stage2.append(Group(eqns))
-
-            for solid in self.solids:
-                g5.append(
-                    SavePositionsIPSTBeforeMoving(dest=solid, sources=None))
-
-                # these two has to be in the iterative group and the nnps has to
-                # be updated
-                # ---------------------------------------
-                g6.append(
-                    AdjustPositionIPST(dest=solid,
-                                       sources=[solid] + self.boundaries,
-                                       u_max=self.u_max))
-
-                g7.append(
-                    CheckUniformityIPST(dest=solid,
-                                        sources=[solid] + self.boundaries,
-                                        debug=self.debug))
-                # ---------------------------------------
-
-                g8.append(ComputeAuhatETVFIPSTSolids(dest=solid, sources=None))
-                g8.append(ResetParticlePositionsIPST(dest=solid, sources=None))
-
-            stage2.append(Group(g5, condition=self.check_ipst_time))
-
-            # this is the iterative group
-            stage2.append(
-                Group(equations=[Group(equations=g6),
-                                 Group(equations=g7)], iterate=True,
-                      max_iterations=self.ipst_max_iterations,
-                      min_iterations=self.ipst_min_iterations,
-                      condition=self.check_ipst_time))
-
-            stage2.append(Group(g8, condition=self.check_ipst_time))
-
         # New contact force equations
-        g9 = []
-        for solid in self.solids:
-            tmp_list = self.solids.copy() + self.rigid_boundaries + self.rigid_bodies
-            tmp_list.remove(solid)
-            g9.append(
-                ComputeContactForceNormals(dest=solid,
-                                           sources=tmp_list))
+        if self.mohseni_contact_force == True:
+            g9 = []
+            for solid in self.solids:
+                tmp_list = self.solids.copy() + self.rigid_boundaries + self.rigid_bodies
+                tmp_list.remove(solid)
+                g9.append(
+                    ComputeContactForceNormals(dest=solid,
+                                            sources=tmp_list))
 
-        stage2.append(Group(equations=g9, real=False))
+            stage2.append(Group(equations=g9, real=False))
 
-        g10 = []
-        for solid in self.solids:
-            tmp_list = self.solids.copy() + self.rigid_boundaries + self.rigid_bodies
-            tmp_list.remove(solid)
-            g10.append(
-                ComputeContactForceDistanceAndClosestPoint(
-                    dest=solid, sources=tmp_list))
-        stage2.append(Group(equations=g10, real=False))
+            g10 = []
+            for solid in self.solids:
+                tmp_list = self.solids.copy() + self.rigid_boundaries + self.rigid_bodies
+                tmp_list.remove(solid)
+                g10.append(
+                    ComputeContactForceDistanceAndClosestPoint(
+                        dest=solid, sources=tmp_list))
+            stage2.append(Group(equations=g10, real=False))
 
-        g11 = []
-        for solid in self.solids:
-            g11.append(
-                ComputeContactForce(dest=solid,
-                                    sources=None,
-                                    kr=self.kr,
-                                    kf=self.kf,
-                                    fric_coeff=self.fric_coeff))
+            g11 = []
+            for solid in self.solids:
+                g11.append(
+                    ComputeContactForce(dest=solid,
+                                        sources=None,
+                                        kr=self.kr,
+                                        kf=self.kf,
+                                        fric_coeff=self.fric_coeff))
 
-        stage2.append(Group(equations=g11, real=False))
+            stage2.append(Group(equations=g11, real=False))
+
+        else:
+            g9 = []
+            for solid in self.solids:
+                tmp_list = self.solids.copy() + self.rigid_boundaries + self.rigid_bodies
+                tmp_list.remove(solid)
+                g9.append(
+                    ContactForceDEMOnElasticBody(dest=solid,
+                                                 sources=tmp_list,
+                                                 kr=self.kr,
+                                                 kf=self.kf,
+                                                 fric_coeff=self.fric_coeff))
+
+            stage2.append(Group(equations=g9, real=False))
 
         g11 = []
         for solid in self.solids:
@@ -2314,33 +2329,45 @@ class SolidsScheme(Scheme):
 
             stage2.append(Group(equations=g5, real=False))
 
-            g9 = []
-            for body in self.rigid_bodies:
-                g9.append(
-                    ComputeContactForceNormals(dest=body,
-                                               sources=self.solids))
+            if self.mohseni_contact_force == True:
+                g9 = []
+                for body in self.rigid_bodies:
+                    g9.append(
+                        ComputeContactForceNormals(dest=body,
+                                                sources=self.solids))
 
-            stage2.append(Group(equations=g9, real=False))
+                stage2.append(Group(equations=g9, real=False))
 
-            g10 = []
-            for body in self.rigid_bodies:
-                g10.append(
-                    ComputeContactForceDistanceAndClosestPoint(
-                        dest=body, sources=self.solids))
+                g10 = []
+                for body in self.rigid_bodies:
+                    g10.append(
+                        ComputeContactForceDistanceAndClosestPoint(
+                            dest=body, sources=self.solids))
 
-            stage2.append(Group(equations=g10, real=False))
+                stage2.append(Group(equations=g10, real=False))
 
-            g5 = []
-            for body in self.rigid_bodies:
-                g5.append(
-                    ComputeContactForceOnRigidBody(
-                        dest=body,
-                        sources=None,
-                        kr=self.kr,
-                        kf=self.kf,
-                        fric_coeff=self.fric_coeff))
+                g5 = []
+                for body in self.rigid_bodies:
+                    g5.append(
+                        ComputeContactForceOnRigidBody(
+                            dest=body,
+                            sources=None,
+                            kr=self.kr,
+                            kf=self.kf,
+                            fric_coeff=self.fric_coeff))
 
-            stage2.append(Group(equations=g5, real=False))
+                stage2.append(Group(equations=g5, real=False))
+            else:
+                g9 = []
+                for body in self.rigid_bodies:
+                    g9.append(
+                        ContactForceDEMOnRigidBody(dest=body,
+                                                   sources=self.solids,
+                                                   kr=self.kr,
+                                                   kf=self.kf,
+                                                   fric_coeff=self.fric_coeff))
+
+                stage2.append(Group(equations=g9, real=False))
 
             # computation of total force and torque at center of mass
             g6 = []
@@ -2370,10 +2397,7 @@ class SolidsScheme(Scheme):
 
         # step = SolidMechStep
         step = SolidMechStepErosion
-        if self.edac is True:
-            step_cls = step
-        else:
-            step_cls = step
+        step_cls = step
 
         for name in self.solids:
             if name not in steppers:
@@ -2411,6 +2435,18 @@ class SolidsScheme(Scheme):
                            'v20', 'v21', 'v22', 's00', 's01', 's02', 's11',
                            's12', 's22', 'as00', 'as01', 'as02', 'as11',
                            'as12', 'as22', 'arho', 'au', 'av', 'aw')
+
+            # For strain energy computation
+            add_properties(pa, 'eps00', 'eps01', 'eps02', 'eps11', 'eps12',
+                           'eps22')
+            add_properties(pa, 'aeps00', 'aeps01', 'aeps02', 'aeps11',
+                           'aeps12', 'aeps22')
+
+            # for plastic limiter
+            add_properties(pa, 'f_y', 'sij_star')
+
+            pa.add_output_arrays(['eps00', 'eps01', 'eps02', 'eps11', 'eps12',
+                                  'eps22'])
 
             # this will change
             kernel = self.kernel(dim=2)
@@ -2454,8 +2490,7 @@ class SolidsScheme(Scheme):
             pa.add_output_arrays(['sigma00', 'sigma01', 'sigma11'])
 
             # now add properties specific to the scheme and PST
-            if self.pst == "gray":
-                add_properties(pa, 'r02', 'r11', 'r22', 'r01', 'r00', 'r12')
+            add_properties(pa, 'r02', 'r11', 'r22', 'r01', 'r00', 'r12')
 
             if self.pst == "gtvf":
                 add_properties(pa, 'p0')
@@ -2486,8 +2521,7 @@ class SolidsScheme(Scheme):
                 setup_ipst(pa, self.kernel)
 
             # for edac
-            if self.edac == True:
-                add_properties(pa, 'ap')
+            add_properties(pa, 'ap')
 
             if self.surf_p_zero == True:
                 pa.add_property('edac_normal', stride=3)
@@ -2507,10 +2541,6 @@ class SolidsScheme(Scheme):
                                's11u_x', 's22u_x', 's00u_x', 's02w_z',
                                's02v_y', 's00v_y', 's01w_z', 's22v_y',
                                's12u_x', 's01u_x')
-
-            # update the h if using wendlandquinticc4
-            if self.kernel_choice == "4":
-                pa.h[:] = pa.h[:] / self.hdx * 2.
 
             pa.add_output_arrays(['p'])
 
@@ -2581,20 +2611,11 @@ class SolidsScheme(Scheme):
                 pa.add_property('vghat')
                 pa.add_property('wghat')
 
-            if self.surf_p_zero == True:
-                pa.add_property('edac_normal', stride=3)
-                pa.add_property('edac_normal_tmp', stride=3)
-                pa.add_property('edac_normal_norm')
-
             # now add properties specific to the scheme and PST
-            if self.pst == "gray":
-                add_properties(pa, 'r02', 'r11', 'r22', 'r01', 'r00', 'r12')
+            add_properties(pa, 'r02', 'r11', 'r22', 'r01', 'r00', 'r12')
 
             if self.pst == "gtvf":
                 add_properties(pa, 'uhat', 'vhat', 'what')
-
-            if self.kernel_choice == "4":
-                pa.h[:] = pa.h[:] / self.hdx * 2.
 
         for rigid_body in self.rigid_bodies:
             pa = pas[rigid_body]
@@ -2874,36 +2895,32 @@ class ComputeJohnsonCookYieldStress(Equation):
 
 class MieGruneisenEOS(Equation):
     """
-    3.2 in [1]
-    3.12 in [2]
-    [1] The study on performances of kernel types in solid dynamic problems
-    by smoothed particle hydrodynamics
+    Eq 15 in Dong 2016
 
-    [2] 3D smooth particle hydrodynamics modeling for high velocity
-    penetrating impact using GPU: Application to a blunt projectile
-    penetrating thin steel plates
     """
-    def __init__(self, dest, sources, c0, s, reference_rho, gamma_0):
+    def __init__(self, dest, sources, c0, s, reference_rho, gruneisen_gamma_0):
         self.c0 = c0
-        self.s = s
         self.rho0 = reference_rho
-        self.gamma_0 = gamma_0
         super(MieGruneisenEOS, self).__init__(dest, sources)
 
-    def initialize(self, d_idx, d_rho, d_e, d_p, d_c0_ref, d_rho_ref):
-        # 3.12 in [2]
+    def initialize(self, d_idx, d_rho, d_e, d_p,
+                   d_mie_gruneisen_gamma,
+                   d_mie_gruneisen_s,
+                   d_c0_ref, d_rho_ref):
+        # eq 15 in Dong 2016
         eta = (d_rho[d_idx] / self.rho0) - 1
         if eta > 0.:
             c1 = self.rho0 * self.c0 * self.c0
-            s1 = self.s - 1.
+            s1 = d_mie_gruneisen_s[0] - 1.
             c2 = c1 * (1. + 2. * s1)
             c3 = c1 * (2. * s1 + 3. * s1 * s1)
-            p_H = c1 * eta + c2 * eta * eta + c3 * eta * eta * eta
-        else:
-            p_H = c1 * eta
 
-        tmp = self.gamma_0 * d_rho[d_idx] * d_e[d_idx]
-        d_p[d_idx] = (1. - 0.5 * self.gamma_0 * eta) * p_H + tmp
+            p_H = a_0 * eta + b_0 * eta**2. + c_0 * eta**3.
+        else:
+            p_H = a_0 * eta**3.
+
+        tmp = d_mie_gruneisen_gamma[0] * d_rho[d_idx] * d_e[d_idx]
+        d_p[d_idx] = (1. - 0.5 * d_mie_gruneisen_gamma[0] * eta) * p_H + tmp
 
 
 class LimitDeviatoricStress(Equation):

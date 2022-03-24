@@ -583,3 +583,59 @@ class ComputeContactForceOnRigidBody(Equation):
             d_fx[d_idx] += (d_fn_x[t2] + d_ft_x[t2])
             d_fy[d_idx] += (d_fn_y[t2] + d_ft_y[t2])
             d_fz[d_idx] += (d_fn_z[t2] + d_ft_z[t2])
+
+
+class ContactForceDEMOnElasticBody(Equation):
+    def __init__(self, dest, sources, fric_coeff=0.5, kr=1e5, kf=1e3):
+        self.kr = kr
+        self.kf = kf
+        self.fric_coeff = fric_coeff
+        super(ContactForceDEMOnElasticBody, self).__init__(dest, sources)
+
+    def loop(self, d_idx, d_m, d_rho, d_au, d_av, d_aw, d_rad_s,
+             s_idx, s_x, s_y, s_z, s_u, s_v, s_w, s_rad_s,
+             d_dem_id,
+             s_dem_id,
+             dt, t, WIJ, RIJ, XIJ):
+        i, t1, t2, t3 = declare('int', 4)
+
+        if d_dem_id[d_idx] != s_dem_id[s_idx]:
+            overlap = RIJ - (d_rad_s[d_idx] + s_rad_s[s_idx])
+            if overlap < 0:
+                nx = - XIJ[0] / RIJ
+                ny = - XIJ[1] / RIJ
+                nz = - XIJ[2] / RIJ
+
+                fn = self.kr * overlap
+
+                # add the force
+                d_au[d_idx] += fn * nx / d_m[d_idx]
+                d_av[d_idx] += fn * ny / d_m[d_idx]
+                d_aw[d_idx] += fn * nz / d_m[d_idx]
+
+
+class ContactForceDEMOnRigidBody(Equation):
+    def __init__(self, dest, sources, fric_coeff=0.5, kr=1e5, kf=1e3):
+        self.kr = kr
+        self.kf = kf
+        self.fric_coeff = fric_coeff
+        super(ContactForceDEMOnRigidBody, self).__init__(dest, sources)
+
+    def loop(self, d_idx, d_m, d_rho, d_fx, d_fy, d_fz, d_rad_s,
+             s_idx, s_x, s_y, s_z, s_u, s_v, s_w, s_rad_s,
+             d_dem_id,
+             s_dem_id,
+             dt, t, WIJ, RIJ, XIJ):
+        if d_dem_id[d_idx] != s_dem_id[s_idx]:
+            overlap = RIJ - (d_rad_s[d_idx] + s_rad_s[s_idx])
+            if overlap < 0:
+                nx = - XIJ[0] / RIJ
+                ny = - XIJ[1] / RIJ
+                nz = - XIJ[2] / RIJ
+
+                fn = self.kr * overlap
+
+                # add the force
+                d_fx[d_idx] += fn * nx
+                d_fy[d_idx] += fn * ny
+                d_fz[d_idx] += fn * nz

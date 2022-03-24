@@ -18,6 +18,7 @@ from solid_mech import SolidsScheme
 from solid_mech_common import (setup_mie_gruniesen_parameters,
                                setup_johnson_cook_parameters,
                                setup_damage_parameters,
+                               get_youngs_mod_from_G_nu,
                                get_youngs_mod_from_K_G,
                                get_poisson_ratio_from_E_G)
 
@@ -32,28 +33,26 @@ from pysph.tools.geometry import get_2d_block, rotate
 import matplotlib
 
 
-class TestSolidErosion1(Application):
+class Dong2016CaseASquareParticleOnAl6061T6(Application):
     def initialize(self):
         # constants
-        self.E = 1e7
-        self.nu = 0.3975
-        self.rho0 = 1.2 * 1e3
+        self.G = 26 * 1e9
+        self.nu = 0.33
+        self.E = get_youngs_mod_from_G_nu(self.G, self.nu)
+        self.rho0 = 2800
 
-        self.dx = 0.001
+        self.dx = 100 * 1e-6
         self.hdx = 1.0
         self.h = self.hdx * self.dx
 
-        # geometry
-        self.target_length = 0.04
-        self.target_height = 0.02
-
         # target properties
-        self.target_JC_A = 100. * 1e3
-        self.target_JC_B = 0.
-        self.target_JC_C = 0.
-        self.target_JC_n = 1.
-        self.target_JC_m = 1.
-        self.target_JC_T_melt = 1000
+        self.target_JC_A = 324 * 1e6
+        self.target_JC_B = 114 * 1e6
+        self.target_JC_C = 0.42
+        self.target_JC_n = 0.002
+        self.target_JC_m = 1.34
+        self.target_JC_T_melt = 925
+        self.target_specific_heat = 875
 
         # setup target damage parameters
         self.target_damage_1 = -0.77
@@ -63,18 +62,23 @@ class TestSolidErosion1(Application):
         self.target_damage_5 = 1.6
 
         # geometry
-        self.rigid_body_length = 0.01
-        self.rigid_body_height = 0.01
-        self.rigid_body_rho = 1000.
+        self.rigid_body_length = 4.780 * 1e-3
+        self.rigid_body_height = 4.780 * 1e-3
+        self.rigid_body_rho = 2000.
         self.rigid_body_spacing = self.dx
+
+        # geometry
+        self.target_length = 3. * self.rigid_body_length
+        self.target_height = 1. * self.rigid_body_length
 
         self.dim = 2
 
         # compute the timestep
-        # self.dt = 0.25 * self.h / ((self.E / self.rho0)**0.5 + 2.85)
-        self.dt = 2.6557e-06
+        self.dt = 0.25 * self.h / ((self.E / self.rho0)**0.5 + 2.85)
+        # self.dt = 1e-9
+        print("timestep is ", self.dt)
 
-        self.tf = 0.016
+        self.tf = 35 * 1e-6
 
         self.c0 = np.sqrt(self.E / (3 * (1. - 2 * self.nu) * self.rho0))
         self.pb = self.rho0 * self.c0**2.
@@ -140,23 +144,23 @@ class TestSolidErosion1(Application):
         hdx = self.hdx
         m = self.rho0 * dx * dx
         h = np.ones_like(x) * hdx * dx
-        rad_s = self.dx / 2.
         rho = self.rho0
+        rad_s = self.dx / 2.
 
         target = get_particle_array(x=x,
                                     y=y,
                                     m=m,
                                     rho=rho,
                                     h=h,
+                                    rad_s=rad_s,
                                     E=self.E,
                                     nu=self.nu,
                                     rho_ref=self.rho0,
-                                    rad_s=rad_s,
                                     name="target",
                                     constants={
                                         'n': 4,
                                         'spacing0': self.dx,
-                                        'specific_heat': 460.,
+                                        'specific_heat': self.target_specific_heat,
                                         'jc_model': 1,
                                         'damage_model': 1
                                     })
@@ -200,8 +204,8 @@ class TestSolidErosion1(Application):
 
         # Create rigid body
         xc, yc, body_id = self.create_rigid_body()
-        xc, yc, _zs = rotate(xc, yc, np.zeros(len(xc)), axis=np.array([0., 0., 1.]), angle=45.)
-        yc += max(target.y) - min(yc) + 4. * self.dx
+        xc, yc, _zs = rotate(xc, yc, np.zeros(len(xc)), axis=np.array([0., 0., 1.]), angle=-15.)
+        yc += max(target.y) - min(yc) + 1.5 * self.dx
         dem_id = body_id
         m = self.rigid_body_rho * self.rigid_body_spacing**2
         h = 1.0 * self.dx
@@ -229,8 +233,8 @@ class TestSolidErosion1(Application):
         rigid_body.add_property('contact_force_is_boundary')
         rigid_body.contact_force_is_boundary[:] = rigid_body.is_boundary[:]
 
-        vel = 50
-        angle = np.pi/2.
+        vel = 51 * 1.
+        angle = 46 / 180 * np.pi
         self.scheme.scheme.set_linear_velocity(
             rigid_body, np.array([vel * cos(angle),
                                   -vel * sin(angle), 0.]))
@@ -272,7 +276,6 @@ class TestSolidErosion1(Application):
         dt = self.dt
         tf = self.tf
 
-        tf = 15.5 * 1e-3
         output = np.array([0.0, 1.38 * 1e-3, 5.17 * 1e-3, 7.38 * 1e-3, 11.462 *
                            1e-3, 15.4 * 1e-3])
 
@@ -293,7 +296,8 @@ class TestSolidErosion1(Application):
                              h=self.h,
                              hdx=self.hdx,
                              artificial_vis_alpha=self.artificial_vis_alpha,
-                             artificial_vis_beta=self.artificial_vis_beta)
+                             artificial_vis_beta=self.artificial_vis_beta,
+                             kr=1e12)
 
         s = SchemeChooser(default='solid', solid=solid)
         return s
@@ -331,7 +335,7 @@ class TestSolidErosion1(Application):
 
 
 if __name__ == '__main__':
-    app = TestSolidErosion1()
+    app = Dong2016CaseASquareParticleOnAl6061T6()
 
     app.run()
     # app.post_process(app.info_filename)
