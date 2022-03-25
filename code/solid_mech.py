@@ -1662,9 +1662,11 @@ class SolidMechStepErosion(SolidMechStep):
         D4 = d_damage_4[0]
         D5 = d_damage_5[0]
 
-        # sigma_star = -d_p[d_idx]
-        sigma_star = 1.  # fixme
+        sigma_star = 0.
+        if s_star > 1e-12:
+            sigma_star = -d_p[d_idx] / s_star
         term_1 = (D1 + D2 * exp(D3 * sigma_star))
+        term_1 = 1.
         term_2 = 1.
         tmp_term_2 = psr / d_JC_psr_0[0]
         if tmp_term_2 > 1e-12:

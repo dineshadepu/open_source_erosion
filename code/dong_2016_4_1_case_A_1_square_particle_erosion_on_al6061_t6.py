@@ -204,8 +204,8 @@ class Dong2016CaseASquareParticleOnAl6061T6(Application):
 
         # Create rigid body
         xc, yc, body_id = self.create_rigid_body()
-        xc, yc, _zs = rotate(xc, yc, np.zeros(len(xc)), axis=np.array([0., 0., 1.]), angle=-15.)
-        yc += max(target.y) - min(yc) + 1.5 * self.dx
+        xc, yc, _zs = rotate(xc, yc, np.zeros(len(xc)), axis=np.array([0., 0., 1.]), angle=-5.)
+        yc += max(target.y) - min(yc) + 1.1 * self.dx
         dem_id = body_id
         m = self.rigid_body_rho * self.rigid_body_spacing**2
         h = 1.0 * self.dx
