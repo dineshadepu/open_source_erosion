@@ -1091,8 +1091,7 @@ def setup_damage_parameters(pa, damage_1, damage_2, damage_3, damage_4,
     pa.add_output_arrays(['is_damaged', 'epsilon_failure'])
 
 
-def setup_mie_gruniesen_parameters(pa, mie_gruneisen_sigma, mie_gruneisen_C,
+def setup_mie_gruniesen_parameters(pa, mie_gruneisen_sigma,
                                    mie_gruneisen_S):
     pa.add_constant('mie_gruneisen_gamma', mie_gruneisen_sigma)
-    pa.add_constant('mie_gruneisen_C', mie_gruneisen_C)
-    pa.add_constant('mie_gruneisen_s', mie_gruneisen_S)
+    pa.add_constant('mie_gruneisen_S', mie_gruneisen_S)

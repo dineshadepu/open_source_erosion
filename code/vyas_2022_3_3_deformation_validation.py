@@ -33,29 +33,57 @@ from pysph.tools.geometry import get_2d_block, rotate
 import matplotlib
 
 
-class Dong2016CaseASquareParticleOnAl6061T6(Application):
+def create_circle_1(diameter=1, spacing=0.05, center=None):
+    dx = spacing
+    x = [0.0]
+    y = [0.0]
+    r = spacing
+    nt = 0
+    radius = diameter / 2.
+
+    tmp_dist = radius - spacing/2.
+    i = 0
+    while tmp_dist > spacing/2.:
+        perimeter = 2. * np.pi * tmp_dist
+        no_of_points = int(perimeter / spacing) + 1
+        theta = np.linspace(0., 2. * np.pi, no_of_points)
+        for t in theta[:-1]:
+            x.append(tmp_dist * np.cos(t))
+            y.append(tmp_dist * np.sin(t))
+        i = i + 1
+        tmp_dist = radius - spacing/2. - i * spacing
+
+    x = np.array(x)
+    y = np.array(y)
+    x, y = (t.ravel() for t in (x, y))
+    if center is None:
+        return x, y
+    else:
+        return x + center[0], y + center[1]
+
+
+class Vyas2022DeformationValidation(Application):
     def initialize(self):
         # constants
-        self.G = 26 * 1e9
-        self.nu = 0.33
-        self.E = get_youngs_mod_from_G_nu(self.G, self.nu)
-        self.rho0 = 2800
+        self.E = 200 * 1e9
+        self.nu = 0.29
+        self.rho0 = 7870
 
-        self.dx = 100 * 1e-6
+        self.dx = 0.5 * 1e-3 / 2.
         self.hdx = 1.0
         self.h = self.hdx * self.dx
 
         # target mie-Gruneisen parameters
-        self.target_mie_gruneisen_gamma = 2.17
-        self.target_mie_gruneisen_S = 1.49
+        self.target_mie_gruneisen_gamma = 1.97
+        self.target_mie_gruneisen_S = 1.4
 
         # target properties
-        self.target_JC_A = 324 * 1e6
-        self.target_JC_B = 114 * 1e6
-        self.target_JC_C = 0.42
-        self.target_JC_n = 0.002
-        self.target_JC_m = 1.34
-        self.target_JC_T_melt = 925
+        self.target_JC_A = 553.1 * 1e6
+        self.target_JC_B = 600.8 * 1e6
+        self.target_JC_C = 0.0134
+        self.target_JC_n = 0.234
+        self.target_JC_m = 1.
+        self.target_JC_T_melt = 1733
         self.target_specific_heat = 875
 
         # setup target damage parameters
@@ -68,21 +96,21 @@ class Dong2016CaseASquareParticleOnAl6061T6(Application):
         # geometry
         self.rigid_body_length = 4.780 * 1e-3
         self.rigid_body_height = 4.780 * 1e-3
+        self.rigid_body_diameter = 50 * 1e-3
         self.rigid_body_rho = 2000.
         self.rigid_body_spacing = self.dx
 
         # geometry
-        self.target_length = 3. * self.rigid_body_length
-        self.target_height = 1. * self.rigid_body_length
+        self.target_length = 0.3 * self.rigid_body_diameter
+        self.target_height = 0.1 * self.rigid_body_diameter
 
         self.dim = 2
 
         # compute the timestep
         self.dt = 0.25 * self.h / ((self.E / self.rho0)**0.5 + 2.85)
         # self.dt = 1e-9
-        print("timestep is ", self.dt)
 
-        self.tf = 35 * 1e-6
+        self.tf = 3 * 1e-5
 
         self.c0 = np.sqrt(self.E / (3 * (1. - 2 * self.nu) * self.rho0))
         self.pb = self.rho0 * self.c0**2.
@@ -116,21 +144,42 @@ class Dong2016CaseASquareParticleOnAl6061T6(Application):
 
         # print(self.boundary_equations)
 
-    # def add_user_options(self, group):
-    #     group.add_argument("--poisson-ratio",
-    #                        action="store",
-    #                        type=float,
-    #                        dest="nu",
-    #                        default=0.3975,
-    #                        help="Poisson ratio of the ring (Defaults to 0.3975)")
+    def add_user_options(self, group):
+        group.add_argument("--spacing",
+                           action="store",
+                           type=float,
+                           dest="spacing",
+                           default=0.5 * 1e-3,
+                           help="Spacing (default to 0.5 * 1e-3)")
 
-    # def consume_user_options(self):
-    #     self.nu = self.options.nu
+        group.add_argument("--velocity",
+                           action="store",
+                           type=float,
+                           dest="velocity",
+                           default=6.264,
+                           help="Velocity (default to 6.264)")
+
+        group.add_argument("--angle",
+                           action="store",
+                           type=float,
+                           dest="angle",
+                           default=90.,
+                           help="Angle (default to 90. degrees)")
+
+    def consume_user_options(self):
+        self.velocity = self.options.velocity
+        self.angle = self.options.angle
+
+        self.dx = self.options.spacing
+        self.rigid_body_spacing = self.dx
+        self.hdx = 1.0
+        self.h = self.hdx * self.dx
+        self.dt = 0.25 * self.h / ((self.E / self.rho0)**0.5 + 2.85)
+        print("timestep is ", self.dt)
 
     def create_rigid_body(self):
-        # create a row of six cylinders
-        x, y = get_2d_block(self.dx, self.rigid_body_length,
-                            self.rigid_body_height)
+        x, y = create_circle_1(diameter=self.rigid_body_diameter,
+                               spacing=self.dx)
 
         body_id = np.array([], dtype=int)
         for i in range(1):
@@ -237,8 +286,8 @@ class Dong2016CaseASquareParticleOnAl6061T6(Application):
         rigid_body.add_property('contact_force_is_boundary')
         rigid_body.contact_force_is_boundary[:] = rigid_body.is_boundary[:]
 
-        vel = 51 * 3.
-        angle = 60 / 180 * np.pi
+        vel = self.velocity
+        angle = self.angle / 180 * np.pi
         self.scheme.scheme.set_linear_velocity(
             rigid_body, np.array([vel * cos(angle),
                                   -vel * sin(angle), 0.]))
@@ -341,7 +390,7 @@ class Dong2016CaseASquareParticleOnAl6061T6(Application):
 
 
 if __name__ == '__main__':
-    app = Dong2016CaseASquareParticleOnAl6061T6()
+    app = Vyas2022DeformationValidation()
 
     app.run()
     # app.post_process(app.info_filename)

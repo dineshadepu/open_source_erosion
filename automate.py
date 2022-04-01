@@ -580,6 +580,113 @@ class Dong2016CaseASquareParticleOnAl6061T6(Problem):
         self.make_output_dir()
 
 
+class Vyas2022DeformationValidation(Problem):
+    def get_name(self):
+        return 'vyas_2022_3_3_deformation_validation'
+
+    def setup(self):
+        get_path = self.input_path
+
+        cmd = 'python code/vyas_2022_3_3_deformation_validation.py' + backend
+
+        # Base case info
+        self.case_info = {
+            # 'dx_0_5_velocity_6_264_angle_0': (dict(
+            #     spacing=0.5 * 1e-3,
+            #     pfreq=100,
+            #     velocity=6.264,
+            #     angle=90.,
+            #     kr=1e12,
+            #     ), 'dx=0.5'),
+
+            # 'dx_0_25_velocity_6_264_angle_0': (dict(
+            #     spacing=0.25 * 1e-3,
+            #     velocity=6.264,
+            #     angle=90.,
+            #     pfreq=200,
+            #     kr=1e12,
+            #     ), 'dx=0.25'),
+
+            # 'dx_0_25_velocity_60_264_angle_0': (dict(
+            #     spacing=0.25 * 1e-3,
+            #     velocity=60.264,
+            #     angle=90.,
+            #     pfreq=200,
+            #     kr=1e12,
+            #     ), 'dx=0.25, velocity 60'),
+
+            'dx_15_nm_velocity_6_264_angle_0': (dict(
+                no_mie_gruneisen_eos=None,
+                spacing=0.15 * 1e-3 / 4.,
+                velocity=6.264,
+                angle=90.,
+                pfreq=200,
+                kr=1e12,
+                ), 'dx=15 nm, velocity 6'),
+
+            'dx_15_nm_velocity_60_264_angle_0': (dict(
+                no_mie_gruneisen_eos=None,
+                spacing=0.15 * 1e-3 / 4.,
+                velocity=60.264,
+                angle=90.,
+                pfreq=200,
+                kr=1e12,
+                ), 'dx=15 nm, velocity 60'),
+
+            'dx_15_nm_velocity_6_264_angle_0_mie_gruneisen': (dict(
+                mie_gruneisen_eos=None,
+                spacing=0.15 * 1e-3 / 4.,
+                velocity=6.264,
+                angle=90.,
+                pfreq=200,
+                kr=1e12,
+                ), 'dx=15 nm, velocity 6'),
+
+            'dx_15_nm_velocity_60_264_angle_0_mie_gruneisen': (dict(
+                mie_gruneisen_eos=None,
+                spacing=0.15 * 1e-3 / 4.,
+                velocity=60.264,
+                angle=90.,
+                pfreq=200,
+                kr=1e12,
+                ), 'dx=15 nm, velocity 60'),
+
+            # 'dx_0_125_velocity_6_264_angle_0': (dict(
+            #     spacing=0.125 * 1e-3,
+            #     velocity=6.264,
+            #     angle=90.,
+            #     pfreq=300,
+            #     kr=1e12,
+            #     ), 'dx=0.125'),
+
+            # 'dx_0_125_velocity_60_264_angle_0': (dict(
+            #     spacing=0.125 * 1e-3,
+            #     velocity=60.264,
+            #     angle=90.,
+            #     pfreq=300,
+            #     kr=1e12,
+            #     ), 'dx=0.125, velocity 60'),
+
+            # 'dx_0_0625_velocity_6_264_angle_0': (dict(
+            #     spacing=0.0625 * 1e-3,
+            #     velocity=6.264,
+            #     angle=90.,
+            #     pfreq=300,
+            #     ), 'dx=0.0625'),
+        }
+
+        self.cases = [
+            Simulation(get_path(name), cmd,
+                       job_info=dict(n_core=n_core,
+                                     n_thread=n_thread), cache_nnps=None,
+                       **scheme_opts(self.case_info[name][0]))
+            for name in self.case_info
+        ]
+
+    def run(self):
+        self.make_output_dir()
+
+
 if __name__ == '__main__':
     PROBLEMS = [TestRigidBodyCollision1,
                 Mohseni2021ControlledSlidingOnAFlatSurface,
@@ -590,7 +697,7 @@ if __name__ == '__main__':
                 Rushdie2019TaylorImpactTest3DPart1,
 
                 TestSolidErosion1,
-    ]
+                Vyas2022DeformationValidation]
 
     automator = Automator(
         simulation_dir='outputs',

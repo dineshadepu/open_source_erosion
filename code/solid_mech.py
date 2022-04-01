@@ -1666,7 +1666,6 @@ class SolidMechStepErosion(SolidMechStep):
         if s_star > 1e-12:
             sigma_star = -d_p[d_idx] / s_star
         term_1 = (D1 + D2 * exp(D3 * sigma_star))
-        term_1 = 1.
         term_2 = 1.
         tmp_term_2 = psr / d_JC_psr_0[0]
         if tmp_term_2 > 1e-12:
@@ -2039,7 +2038,7 @@ class SolidsScheme(Scheme):
         self.debug = False
 
         self.stiff_eos = stiff_eos
-        self.gruneisen_eos = False
+        self.mie_gruneisen_eos = False
         self.gamma = gamma
 
         # boundary conditions
@@ -2073,11 +2072,8 @@ class SolidsScheme(Scheme):
                           dest='adami_velocity_extrapolate', default=False,
                           help='Use adami velocity extrapolation')
 
-        add_bool_argument(group, 'stiff-eos', dest='stiff_eos', default=False,
-                          help='use stiff equation of state')
-
-        add_bool_argument(group, 'gruneisen-eos', dest='gruneisen_eos',
-                          default=False, help='Use Mie Gruneisen equation of state')
+        add_bool_argument(group, 'mie-gruneisen-eos', dest='mie_gruneisen_eos',
+                          default=True, help='Use Mie Gruneisen equation of state')
 
         group.add_argument("--kr-stiffness", action="store",
                            dest="kr", default=1e8,
@@ -2100,7 +2096,7 @@ class SolidsScheme(Scheme):
     def consume_user_options(self, options):
         _vars = [
             'artificial_vis_alpha',
-            'stiff_eos', 'gruneisen_eos',
+            'mie_gruneisen_eos',
             'kr', 'kf', 'fric_coeff', 'mohseni_contact_force'
         ]
         data = dict((var, self._smart_getattr(options, var)) for var in _vars)
@@ -2210,9 +2206,8 @@ class SolidsScheme(Scheme):
             stage2.append(Group(g1))
 
         for solid in self.solids:
-            if self.stiff_eos is True:
-                g2.append(
-                    StiffEOS(solid, sources=None, gamma=self.gamma))
+            if self.mie_gruneisen_eos is True:
+                g2.append(MieGruneisenEOS(solid, sources=None))
             else:
                 g2.append(IsothermalEOS(solid, sources=None))
 
@@ -2267,7 +2262,7 @@ class SolidsScheme(Scheme):
                 tmp_list.remove(solid)
                 g9.append(
                     ComputeContactForceNormals(dest=solid,
-                                            sources=tmp_list))
+                                               sources=tmp_list))
 
             stage2.append(Group(equations=g9, real=False))
 
@@ -2899,30 +2894,27 @@ class MieGruneisenEOS(Equation):
     """
     Eq 15 in Dong 2016
 
+    eq 4 in Dong 2017, Modeling, simulation and analysis of single
+    angular-type particles on ductile surfaces
+
     """
-    def __init__(self, dest, sources, c0, s, reference_rho, gruneisen_gamma_0):
-        self.c0 = c0
-        self.rho0 = reference_rho
+    def __init__(self, dest, sources):
         super(MieGruneisenEOS, self).__init__(dest, sources)
 
     def initialize(self, d_idx, d_rho, d_e, d_p,
                    d_mie_gruneisen_gamma,
-                   d_mie_gruneisen_s,
+                   d_mie_gruneisen_S,
                    d_c0_ref, d_rho_ref):
-        # eq 15 in Dong 2016
-        eta = (d_rho[d_idx] / self.rho0) - 1
-        if eta > 0.:
-            c1 = self.rho0 * self.c0 * self.c0
-            s1 = d_mie_gruneisen_s[0] - 1.
-            c2 = c1 * (1. + 2. * s1)
-            c3 = c1 * (2. * s1 + 3. * s1 * s1)
+        # eq 4 in Dong 2017, Modeling, simulation and analysis of single
+        # angular-type particles on ductile surfaces
+        eta = (d_rho[d_idx] / d_rho_ref[0]) - 1
 
-            p_H = a_0 * eta + b_0 * eta**2. + c_0 * eta**3.
-        else:
-            p_H = a_0 * eta**3.
+        tmp = d_mie_gruneisen_gamma[0] * d_rho_ref[0] * d_e[d_idx]
+        tmp1 = 1. + (1. - d_mie_gruneisen_gamma[0] * 0.5) * eta
+        numer = d_rho_ref[0] * d_c0_ref[0]**2. * eta * tmp1
+        denom = (1. - (d_mie_gruneisen_S[0] - 1.) * eta)
 
-        tmp = d_mie_gruneisen_gamma[0] * d_rho[d_idx] * d_e[d_idx]
-        d_p[d_idx] = (1. - 0.5 * d_mie_gruneisen_gamma[0] * eta) * p_H + tmp
+        d_p[d_idx] = numer / denom + tmp
 
 
 class LimitDeviatoricStress(Equation):
