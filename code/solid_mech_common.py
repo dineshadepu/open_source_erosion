@@ -1093,5 +1093,9 @@ def setup_damage_parameters(pa, damage_1, damage_2, damage_3, damage_4,
 
 def setup_mie_gruniesen_parameters(pa, mie_gruneisen_sigma,
                                    mie_gruneisen_S):
+    """
+    Write the ranges of the expected values
+
+    """
     pa.add_constant('mie_gruneisen_gamma', mie_gruneisen_sigma)
     pa.add_constant('mie_gruneisen_S', mie_gruneisen_S)

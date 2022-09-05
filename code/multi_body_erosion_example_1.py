@@ -77,7 +77,7 @@ class Dong2016CaseA1SquareParticleOnAl6061T6(Application):
 
         self.dim = 2
 
-        self.tf = 35 * 1e-6
+        self.tf = 100 * 1e-6
 
         self.c0 = np.sqrt(self.E / (3 * (1. - 2 * self.nu) * self.rho0))
         self.pb = self.rho0 * self.c0**2.
@@ -211,16 +211,24 @@ class Dong2016CaseA1SquareParticleOnAl6061T6(Application):
 
         # Create rigid body
         xc, yc, body_id = self.create_rigid_body()
-        xc, yc, _zs = rotate(xc, yc, np.zeros(len(xc)), axis=np.array([0., 0., 1.]),
-                             angle=self.azimuth_theta)
-        yc += max(target.y) - min(yc) + 1.1 * self.dx
-        dem_id = body_id
+        xc1, yc1, _zs1 = rotate(xc, yc, np.zeros(len(xc)), axis=np.array([0., 0., 1.]),
+                                angle=self.azimuth_theta)
+        body_id_1 = np.ones(len(xc), dtype=int) * 0
+        # yc1 += max(target.y) - min(yc) + 1.1 * self.dx
+        yc1 += max(target.y) - min(yc) + 10.1 * self.dx
+
+        body_id_2 = np.ones(len(xc), dtype=int) * 1
+        xc2 = xc1 - self.rigid_body_length * 1.4
+        yc2 = yc1 + self.rigid_body_height * 2.3
+        x = np.concatenate((xc1, xc2))
+        y = np.concatenate((yc1, yc2))
+
         m = self.rigid_body_rho * self.rigid_body_spacing**2
         h = 1.0 * self.dx
         rad_s = self.dx / 2.
         rigid_body = get_particle_array(name='rigid_body',
-                                        x=xc,
-                                        y=yc,
+                                        x=x,
+                                        y=y,
                                         h=h,
                                         m=m,
                                         rho=self.rigid_body_rho,
@@ -230,8 +238,8 @@ class Dong2016CaseA1SquareParticleOnAl6061T6(Application):
                                             'poisson_ratio': 0.3,
                                             'spacing0': self.dx,
                                         })
-        dem_id = np.ones(len(rigid_body.x), dtype=int)
-        body_id = np.zeros(len(rigid_body.x), dtype=int)
+        body_id = np.concatenate((body_id_1, body_id_2))
+        dem_id = body_id[:] + 1
         rigid_body.add_property('dem_id', type='int', data=dem_id)
         rigid_body.add_property('body_id', type='int', data=body_id)
         rigid_body.add_constant('total_no_bodies', [2])
@@ -241,11 +249,12 @@ class Dong2016CaseA1SquareParticleOnAl6061T6(Application):
         rigid_body.add_property('contact_force_is_boundary')
         rigid_body.contact_force_is_boundary[:] = rigid_body.is_boundary[:]
 
-        vel = 51. * 2
+        vel = 51. * 5.
 
         angle = self.vel_alpha / 180 * np.pi
         self.scheme.scheme.set_linear_velocity(
             rigid_body, np.array([vel * cos(angle),
+                                  -vel * sin(angle), 0., vel * cos(angle),
                                   -vel * sin(angle), 0.]))
 
         # self.scheme.scheme.set_angular_velocity(
@@ -280,7 +289,6 @@ class Dong2016CaseA1SquareParticleOnAl6061T6(Application):
             damage_3=self.target_damage_3,
             damage_4=self.target_damage_4,
             damage_5=self.target_damage_5)
-        target.yield_stress[:] = target.JC_A[0] * 4.
 
         return [target, rigid_body]
 
@@ -308,12 +316,6 @@ class Dong2016CaseA1SquareParticleOnAl6061T6(Application):
 
         s = SchemeChooser(default='solid', solid=solid)
         return s
-
-    # def post_step(self, solver):
-    #     for pa in self.particles:
-    #         if pa.name == 'target':
-    #             damaged = np.where(pa.is_damaged == 1.)[0]
-    #             pa.remove_particles(damaged)
 
     def customize_output(self):
         self._mayavi_config('''

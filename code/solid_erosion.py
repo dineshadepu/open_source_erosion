@@ -39,10 +39,7 @@ from rigid_body_common import (set_total_mass, set_center_of_mass,
                                set_body_frame_normal_vectors,
                                set_moment_of_inertia_and_its_inverse,
                                BodyForce, SumUpExternalForces,
-                               normalize_R_orientation, RigidBodyLVC,
-                               RigidBodyCanelasRigidRigid,
-                               RigidBodyCanelasRigidWall,
-                               RigidBodyBuiRigidRigid,
+                               normalize_R_orientation,
                                GTVFRigidBody3DStep)
 # compute the boundary particles
 from boundary_particles import (get_boundary_identification_etvf_equations,

@@ -33,31 +33,79 @@ from pysph.tools.geometry import get_2d_block, rotate
 import matplotlib
 
 
-class Dong2016CaseA1SquareParticleOnAl6061T6(Application):
+def create_circle_1(diameter=1, spacing=0.05, center=None):
+    dx = spacing
+    x = [0.0]
+    y = [0.0]
+    r = spacing
+    nt = 0
+    radius = diameter / 2.
+
+    tmp_dist = radius - spacing/2.
+    i = 0
+    while tmp_dist > spacing/2.:
+        perimeter = 2. * np.pi * tmp_dist
+        no_of_points = int(perimeter / spacing) + 1
+        theta = np.linspace(0., 2. * np.pi, no_of_points)
+        for t in theta[:-1]:
+            x.append(tmp_dist * np.cos(t))
+            y.append(tmp_dist * np.sin(t))
+        i = i + 1
+        tmp_dist = radius - spacing/2. - i * spacing
+
+    x = np.array(x)
+    y = np.array(y)
+    x, y = (t.ravel() for t in (x, y))
+    if center is None:
+        return x, y
+    else:
+        return x + center[0], y + center[1]
+
+
+def create_circle(diameter=1, spacing=0.05, center=None):
+    radius = diameter/2.
+    xtmp, ytmp = get_2d_block(spacing, diameter+spacing, diameter+spacing)
+    x = []
+    y = []
+    for i in range(len(xtmp)):
+        dist = xtmp[i]**2. + ytmp[i]**2.
+        if dist < radius**2:
+            x.append(xtmp[i])
+            y.append(ytmp[i])
+
+    x = np.array(x)
+    y = np.array(y)
+    x, y = (t.ravel() for t in (x, y))
+    if center is None:
+        return x, y
+    else:
+        return x + center[0], y + center[1]
+
+
+class CaoXuerui2022SphericalParticleImpact2D(Application):
     def initialize(self):
         # constants
-        self.G = 26 * 1e9
+        self.E = 70 * 1e9
         self.nu = 0.33
-        self.E = get_youngs_mod_from_G_nu(self.G, self.nu)
-        self.rho0 = 2800
+        self.rho0 = 2700
 
         self.dx = 100 * 1e-6
-        self.hdx = 1.0
+        self.hdx = 1.3
         self.h = self.hdx * self.dx
         self.rigid_body_spacing = self.dx
 
         # target mie-Gruneisen parameters
-        self.target_mie_gruneisen_gamma = 2.17
-        self.target_mie_gruneisen_S = 1.49
+        self.target_mie_gruneisen_gamma = 1.97
+        self.target_mie_gruneisen_S = 1.40
 
         # target properties
-        self.target_JC_A = 324 * 1e6
-        self.target_JC_B = 114 * 1e6
-        self.target_JC_C = 0.42
-        self.target_JC_n = 0.002
-        self.target_JC_m = 1.34
+        self.target_JC_A = 335 * 1e6
+        self.target_JC_B = 85 * 1e6
+        self.target_JC_C = 0.012
+        self.target_JC_n = 0.11
+        self.target_JC_m = 1.0
         self.target_JC_T_melt = 925
-        self.target_specific_heat = 875
+        self.target_specific_heat = 885
 
         # setup target damage parameters
         self.target_damage_1 = -0.77
@@ -67,17 +115,16 @@ class Dong2016CaseA1SquareParticleOnAl6061T6(Application):
         self.target_damage_5 = 1.6
 
         # geometry
-        self.rigid_body_length = 4.780 * 1e-3
-        self.rigid_body_height = 4.780 * 1e-3
-        self.rigid_body_rho = 2000.
+        self.rigid_body_diameter = 5. * 1e-3
+        self.rigid_body_rho = 7850.
 
         # geometry
-        self.target_length = 3. * self.rigid_body_length
-        self.target_height = 1. * self.rigid_body_length
+        self.target_length = 10. * 1e-3
+        self.target_height = 5. * 1e-3
 
         self.dim = 2
 
-        self.tf = 35 * 1e-6
+        self.tf = 1.5 * 1e-5
 
         self.c0 = np.sqrt(self.E / (3 * (1. - 2 * self.nu) * self.rho0))
         self.pb = self.rho0 * self.c0**2.
@@ -107,6 +154,7 @@ class Dong2016CaseA1SquareParticleOnAl6061T6(Application):
         # print(self.boundary_equations)
 
     def add_user_options(self, group):
+        # we don't use this in this example
         group.add_argument("--azimuth-theta",
                            action="store",
                            type=float,
@@ -118,7 +166,7 @@ class Dong2016CaseA1SquareParticleOnAl6061T6(Application):
                            action="store",
                            type=float,
                            dest="vel_alpha",
-                           default=60,
+                           default=45.,
                            help="Angle at which the velocity vector is pointed")
 
         group.add_argument("--spacing",
@@ -131,10 +179,10 @@ class Dong2016CaseA1SquareParticleOnAl6061T6(Application):
     def consume_user_options(self):
         # self.nu = self.options.nu
         self.vel_alpha = self.options.vel_alpha
-        self.azimuth_theta = self.options.azimuth_theta
+        # print("impact angle", self.vel_alpha)
 
         self.dx = self.options.spacing * 1e-6
-        self.hdx = 1.0
+        self.hdx = 1.3
         self.h = self.hdx * self.dx
         self.rigid_body_spacing = self.dx
 
@@ -145,12 +193,11 @@ class Dong2016CaseA1SquareParticleOnAl6061T6(Application):
         # compute the timestep
         self.dt = 0.25 * self.h / ((self.E / self.rho0)**0.5 + 2.85)
         # self.dt = 1e-9
-        print("timestep is ", self.dt)
+        # print("timestep is ", self.dt)
 
     def create_rigid_body(self):
         # create a row of six cylinders
-        x, y = get_2d_block(self.dx, self.rigid_body_length,
-                            self.rigid_body_height)
+        x, y = create_circle_1(self.rigid_body_diameter, self.dx)
 
         body_id = np.array([], dtype=int)
         for i in range(1):
@@ -211,8 +258,8 @@ class Dong2016CaseA1SquareParticleOnAl6061T6(Application):
 
         # Create rigid body
         xc, yc, body_id = self.create_rigid_body()
-        xc, yc, _zs = rotate(xc, yc, np.zeros(len(xc)), axis=np.array([0., 0., 1.]),
-                             angle=self.azimuth_theta)
+        # xc, yc, _zs = rotate(xc, yc, np.zeros(len(xc)), axis=np.array([0., 0., 1.]),
+        #                      angle=self.azimuth_theta)
         yc += max(target.y) - min(yc) + 1.1 * self.dx
         dem_id = body_id
         m = self.rigid_body_rho * self.rigid_body_spacing**2
@@ -241,12 +288,14 @@ class Dong2016CaseA1SquareParticleOnAl6061T6(Application):
         rigid_body.add_property('contact_force_is_boundary')
         rigid_body.contact_force_is_boundary[:] = rigid_body.is_boundary[:]
 
-        vel = 51. * 2
+        vel = 18.
 
         angle = self.vel_alpha / 180 * np.pi
         self.scheme.scheme.set_linear_velocity(
             rigid_body, np.array([vel * cos(angle),
                                   -vel * sin(angle), 0.]))
+        self.scheme.scheme.set_angular_velocity(
+            rigid_body, np.array([0., 0., -1280]))
 
         # self.scheme.scheme.set_angular_velocity(
         #     rigid_body, np.array([0.0, 0.0, 10.]))
@@ -280,7 +329,7 @@ class Dong2016CaseA1SquareParticleOnAl6061T6(Application):
             damage_3=self.target_damage_3,
             damage_4=self.target_damage_4,
             damage_5=self.target_damage_5)
-        target.yield_stress[:] = target.JC_A[0] * 4.
+        # target.yield_stress[:] = target.JC_A[0] * 4.
 
         return [target, rigid_body]
 
@@ -304,6 +353,7 @@ class Dong2016CaseA1SquareParticleOnAl6061T6(Application):
                              hdx=self.hdx,
                              artificial_vis_alpha=self.artificial_vis_alpha,
                              artificial_vis_beta=self.artificial_vis_beta,
+                             gy=-9.81,  # No change in the result
                              kr=1e12)
 
         s = SchemeChooser(default='solid', solid=solid)
@@ -321,9 +371,54 @@ class Dong2016CaseA1SquareParticleOnAl6061T6(Application):
         b.scalar = 'vmag'
         ''')
 
+    def post_process(self, fname):
+        import matplotlib.pyplot as plt
+        from matplotlib.patches import Rectangle
+        from pysph.solver.utils import load, get_files
+
+        info = self.read_info(fname)
+        output_files = self.output_files
+
+        from pysph.solver.utils import iter_output
+
+        t = []
+
+        data = load(self.output_files[0])
+        particle_arrays = data['arrays']
+        solver_data = data['solver_data']
+
+        rb = particle_arrays['rigid_body']
+        # print(rb.omega)
+
+        data = load(self.output_files[-1])
+        particle_arrays = data['arrays']
+        solver_data = data['solver_data']
+
+        target = particle_arrays['target']
+
+        indices = []
+        for i in range(len(target.x)):
+            if target.x[i] > -10*1e-4 and target.x[i] < 10*1e-4:
+                if target.y[i] > 2.5*1e-3:
+                    indices.append(i)
+
+        plt.title('Particle plot')
+        plt.xlabel('x')
+        plt.ylabel('y')
+        # plt.clf()
+        plt.scatter(target.x[indices]*1e3, target.y[indices]*1e3)
+        plt.legend()
+        fig = os.path.join(os.path.dirname(fname), "topology.png")
+        plt.axes().set_aspect('equal', 'datalim')
+        plt.savefig(fig, dpi=300)
+        # plt.show()
+        # ========================
+        # x amplitude figure
+        # ========================
+
 
 if __name__ == '__main__':
-    app = Dong2016CaseA1SquareParticleOnAl6061T6()
+    app = CaoXuerui2022SphericalParticleImpact2D()
 
     app.run()
-    # app.post_process(app.info_filename)
+    app.post_process(app.info_filename)

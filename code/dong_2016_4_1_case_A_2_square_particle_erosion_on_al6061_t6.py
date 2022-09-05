@@ -33,7 +33,7 @@ from pysph.tools.geometry import get_2d_block, rotate
 import matplotlib
 
 
-class Dong2016CaseA1SquareParticleOnAl6061T6(Application):
+class Dong2016CaseASquareParticleOnAl6061T6(Application):
     def initialize(self):
         # constants
         self.G = 26 * 1e9
@@ -44,7 +44,6 @@ class Dong2016CaseA1SquareParticleOnAl6061T6(Application):
         self.dx = 100 * 1e-6
         self.hdx = 1.0
         self.h = self.hdx * self.dx
-        self.rigid_body_spacing = self.dx
 
         # target mie-Gruneisen parameters
         self.target_mie_gruneisen_gamma = 2.17
@@ -70,12 +69,18 @@ class Dong2016CaseA1SquareParticleOnAl6061T6(Application):
         self.rigid_body_length = 4.780 * 1e-3
         self.rigid_body_height = 4.780 * 1e-3
         self.rigid_body_rho = 2000.
+        self.rigid_body_spacing = self.dx
 
         # geometry
         self.target_length = 3. * self.rigid_body_length
         self.target_height = 1. * self.rigid_body_length
 
         self.dim = 2
+
+        # compute the timestep
+        self.dt = 0.25 * self.h / ((self.E / self.rho0)**0.5 + 2.85)
+        # self.dt = 1e-9
+        print("timestep is ", self.dt)
 
         self.tf = 35 * 1e-6
 
@@ -86,6 +91,10 @@ class Dong2016CaseA1SquareParticleOnAl6061T6(Application):
         self.artificial_vis_beta = 0.0
 
         self.seval = None
+
+        # edac constants
+        self.edac_alpha = 0.5
+        self.edac_nu = self.edac_alpha * self.c0 * self.h / 8
 
         # attributes for Sun PST technique
         self.u_f = 0.059
@@ -100,52 +109,23 @@ class Dong2016CaseA1SquareParticleOnAl6061T6(Application):
 
         # boundary equations
         self.boundary_equations_1 = get_boundary_identification_etvf_equations(
-            destinations=["target"], sources=["target"])
+            destinations=["target"], sources=["target", "target_wall"],
+            boundaries=["target_wall"])
 
         self.boundary_equations = self.boundary_equations_1
 
         # print(self.boundary_equations)
 
-    def add_user_options(self, group):
-        group.add_argument("--azimuth-theta",
-                           action="store",
-                           type=float,
-                           dest="azimuth_theta",
-                           default=-5,
-                           help="Angle at which the square body is rotated")
+    # def add_user_options(self, group):
+    #     group.add_argument("--poisson-ratio",
+    #                        action="store",
+    #                        type=float,
+    #                        dest="nu",
+    #                        default=0.3975,
+    #                        help="Poisson ratio of the ring (Defaults to 0.3975)")
 
-        group.add_argument("--vel-alpha",
-                           action="store",
-                           type=float,
-                           dest="vel_alpha",
-                           default=60,
-                           help="Angle at which the velocity vector is pointed")
-
-        group.add_argument("--spacing",
-                           action="store",
-                           type=float,
-                           dest="spacing",
-                           default=100,
-                           help="Spacing in nanometers")
-
-    def consume_user_options(self):
-        # self.nu = self.options.nu
-        self.vel_alpha = self.options.vel_alpha
-        self.azimuth_theta = self.options.azimuth_theta
-
-        self.dx = self.options.spacing * 1e-6
-        self.hdx = 1.0
-        self.h = self.hdx * self.dx
-        self.rigid_body_spacing = self.dx
-
-        # edac constants
-        self.edac_alpha = 0.5
-        self.edac_nu = self.edac_alpha * self.c0 * self.h / 8
-
-        # compute the timestep
-        self.dt = 0.25 * self.h / ((self.E / self.rho0)**0.5 + 2.85)
-        # self.dt = 1e-9
-        print("timestep is ", self.dt)
+    # def consume_user_options(self):
+    #     self.nu = self.options.nu
 
     def create_rigid_body(self):
         # create a row of six cylinders
@@ -160,8 +140,7 @@ class Dong2016CaseA1SquareParticleOnAl6061T6(Application):
         return x, y, body_id
 
     def create_particles(self):
-        x, y = get_2d_block(self.dx, self.target_length + 6. * self.dx,
-                            self.target_height + 6. * self.dx)
+        x, y = get_2d_block(self.dx, self.target_length, self.target_height)
         x = x.ravel()
         y = y.ravel()
 
@@ -193,26 +172,43 @@ class Dong2016CaseA1SquareParticleOnAl6061T6(Application):
         target.add_property('dem_id', type='int', data=dem_id)
         target.add_constant('total_no_bodies', [2])
 
+        x, y = get_2d_block(self.dx, self.target_length + 6. * self.dx,
+                            self.target_height + 6. * self.dx)
+        x = x.ravel()
+        y = y.ravel()
+
+        dx = self.dx
+        hdx = self.hdx
+        m = self.rho0 * dx * dx
+        h = np.ones_like(x) * hdx * dx
+        rho = self.rho0
+
+        target_wall = get_particle_array(x=x,
+                                         y=y,
+                                         m=m,
+                                         rho=rho,
+                                         h=h,
+                                         E=self.E,
+                                         nu=self.nu,
+                                         rho_ref=self.rho0,
+                                         name="target_wall",
+                                         constants={
+                                             'n': 4,
+                                             'spacing0': self.dx,
+                                         })
+        target_wall.y -= 3. * self.dx
+        remove_overlap_particles(target_wall, target, self.dx/2.)
+
         indices = []
-        min_y = min(target.y)
-        min_x = min(target.x)
-        max_x = max(target.x)
-        for i in range(len(target.y)):
-            if target.y[i] < min_y + 3. * self.dx:
+        min_y = min(target_wall.y)
+        for i in range(len(target_wall.y)):
+            if target_wall.y[i] < min_y + 2. * self.dx:
                 indices.append(i)
-            elif target.x[i] < min_x + 3. * self.dx:
-                indices.append(i)
-            elif target.x[i] > max_x - 3. * self.dx:
-                indices.append(i)
-        # add static particle data
-        target.add_property('is_static')
-        target.is_static[:] = 0.
-        target.is_static[indices] = 1.
+        target_wall.remove_particles(indices)
 
         # Create rigid body
         xc, yc, body_id = self.create_rigid_body()
-        xc, yc, _zs = rotate(xc, yc, np.zeros(len(xc)), axis=np.array([0., 0., 1.]),
-                             angle=self.azimuth_theta)
+        xc, yc, _zs = rotate(xc, yc, np.zeros(len(xc)), axis=np.array([0., 0., 1.]), angle=-5.)
         yc += max(target.y) - min(yc) + 1.1 * self.dx
         dem_id = body_id
         m = self.rigid_body_rho * self.rigid_body_spacing**2
@@ -236,14 +232,13 @@ class Dong2016CaseA1SquareParticleOnAl6061T6(Application):
         rigid_body.add_property('body_id', type='int', data=body_id)
         rigid_body.add_constant('total_no_bodies', [2])
 
-        self.scheme.setup_properties([target, rigid_body])
+        self.scheme.setup_properties([target, target_wall, rigid_body])
 
         rigid_body.add_property('contact_force_is_boundary')
         rigid_body.contact_force_is_boundary[:] = rigid_body.is_boundary[:]
 
-        vel = 51. * 2
-
-        angle = self.vel_alpha / 180 * np.pi
+        vel = 51 * 3.
+        angle = 60 / 180 * np.pi
         self.scheme.scheme.set_linear_velocity(
             rigid_body, np.array([vel * cos(angle),
                                   -vel * sin(angle), 0.]))
@@ -280,9 +275,8 @@ class Dong2016CaseA1SquareParticleOnAl6061T6(Application):
             damage_3=self.target_damage_3,
             damage_4=self.target_damage_4,
             damage_5=self.target_damage_5)
-        target.yield_stress[:] = target.JC_A[0] * 4.
 
-        return [target, rigid_body]
+        return [target, target_wall, rigid_body]
 
     def configure_scheme(self):
         dt = self.dt
@@ -298,8 +292,13 @@ class Dong2016CaseA1SquareParticleOnAl6061T6(Application):
 
     def create_scheme(self):
         solid = SolidsScheme(solids=['target'],
+                             boundaries=['target_wall'],
                              rigid_bodies=['rigid_body'],
                              dim=2,
+                             pb=self.pb,
+                             u_max=self.u_max,
+                             mach_no=self.mach_no,
+                             ipst_max_iterations=self.ipst_max_iterations,
                              h=self.h,
                              hdx=self.hdx,
                              artificial_vis_alpha=self.artificial_vis_alpha,
@@ -309,11 +308,30 @@ class Dong2016CaseA1SquareParticleOnAl6061T6(Application):
         s = SchemeChooser(default='solid', solid=solid)
         return s
 
-    # def post_step(self, solver):
-    #     for pa in self.particles:
-    #         if pa.name == 'target':
-    #             damaged = np.where(pa.is_damaged == 1.)[0]
-    #             pa.remove_particles(damaged)
+    def _make_accel_eval(self, equations, pa_arrays):
+        if self.seval is None:
+            kernel = self.scheme.scheme.kernel(dim=self.dim)
+            seval = SPHEvaluator(arrays=pa_arrays,
+                                 equations=equations,
+                                 dim=self.dim,
+                                 kernel=kernel)
+            self.seval = seval
+            return self.seval
+        else:
+            self.seval.update()
+            return self.seval
+        return seval
+
+    def pre_step(self, solver):
+        if solver.count % 10 == 0:
+            t = solver.t
+            dt = solver.dt
+
+            arrays = self.particles
+            a_eval = self._make_accel_eval(self.boundary_equations, arrays)
+
+            # When
+            a_eval.evaluate(t, dt)
 
     def customize_output(self):
         self._mayavi_config('''
@@ -323,7 +341,7 @@ class Dong2016CaseA1SquareParticleOnAl6061T6(Application):
 
 
 if __name__ == '__main__':
-    app = Dong2016CaseA1SquareParticleOnAl6061T6()
+    app = Dong2016CaseASquareParticleOnAl6061T6()
 
     app.run()
     # app.post_process(app.info_filename)

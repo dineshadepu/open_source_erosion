@@ -1,6 +1,7 @@
 import numpy as np
 import os
 from math import cos, sin
+import math
 
 # SPH equations
 from pysph.base.kernels import (QuinticSpline)
@@ -29,17 +30,45 @@ from pysph.solver.utils import load, get_files
 from pysph.sph.solid_mech.basic import (get_speed_of_sound, get_bulk_mod,
                                         get_shear_modulus)
 from pysph.tools.geometry import get_2d_block, rotate
+from pysph.tools.geometry import get_3d_block
 
 import matplotlib
 
 
-class Dong2016CaseA1SquareParticleOnAl6061T6(Application):
+def create_surface_particles_sphere(samples=100):
+    # https://stackoverflow.com/questions/9600801/evenly-distributing-n-points-on-a-sphere
+    points = []
+    phi = math.pi * (3. - math.sqrt(5.))  # golden angle in radians
+
+    sphere_rad = 2.5 * 1e-3
+
+    for i in range(samples):
+        y = 1. - (i / float(samples - 1.)) * 2  # y goes from 1 to -1
+        radius = math.sqrt(1. - y * y)  # radius at y
+
+        theta = phi * i  # golden angle increment
+
+        x = math.cos(theta) * radius
+        z = math.sin(theta) * radius
+
+        points.append((x, y, z))
+
+    # print("points", len(points))
+    x_, y_, z_ = [], [], []
+    for i in range(len(points)):
+        x_.append(points[i][0] * sphere_rad)
+        y_.append(points[i][1] * sphere_rad)
+        z_.append(points[i][2] * sphere_rad)
+
+    return np.asarray(x_), np.asarray(y_), np.asarray(z_)
+
+
+class CaoXuerui2022SphericalParticleImpact3D(Application):
     def initialize(self):
         # constants
-        self.G = 26 * 1e9
+        self.E = 70 * 1e9
         self.nu = 0.33
-        self.E = get_youngs_mod_from_G_nu(self.G, self.nu)
-        self.rho0 = 2800
+        self.rho0 = 2700
 
         self.dx = 100 * 1e-6
         self.hdx = 1.0
@@ -47,17 +76,17 @@ class Dong2016CaseA1SquareParticleOnAl6061T6(Application):
         self.rigid_body_spacing = self.dx
 
         # target mie-Gruneisen parameters
-        self.target_mie_gruneisen_gamma = 2.17
-        self.target_mie_gruneisen_S = 1.49
+        self.target_mie_gruneisen_gamma = 1.97
+        self.target_mie_gruneisen_S = 1.40
 
         # target properties
-        self.target_JC_A = 324 * 1e6
-        self.target_JC_B = 114 * 1e6
-        self.target_JC_C = 0.42
-        self.target_JC_n = 0.002
-        self.target_JC_m = 1.34
+        self.target_JC_A = 335 * 1e6
+        self.target_JC_B = 85 * 1e6
+        self.target_JC_C = 0.012
+        self.target_JC_n = 0.11
+        self.target_JC_m = 1.0
         self.target_JC_T_melt = 925
-        self.target_specific_heat = 875
+        self.target_specific_heat = 885
 
         # setup target damage parameters
         self.target_damage_1 = -0.77
@@ -67,17 +96,18 @@ class Dong2016CaseA1SquareParticleOnAl6061T6(Application):
         self.target_damage_5 = 1.6
 
         # geometry
-        self.rigid_body_length = 4.780 * 1e-3
-        self.rigid_body_height = 4.780 * 1e-3
-        self.rigid_body_rho = 2000.
+        self.rigid_body_diameter = 5. * 1e-3
+        self.rigid_body_rho = 7850.
 
         # geometry
-        self.target_length = 3. * self.rigid_body_length
-        self.target_height = 1. * self.rigid_body_length
+        self.target_length = 70 * 50. * 1e-6
+        self.target_height = 15 * 50. * 1e-6
+        # z-direction, out of the screen
+        self.target_depth = 70 * 50. * 1e-6
 
-        self.dim = 2
+        self.dim = 3
 
-        self.tf = 35 * 1e-6
+        self.tf = 4. * 1e-5
 
         self.c0 = np.sqrt(self.E / (3 * (1. - 2 * self.nu) * self.rho0))
         self.pb = self.rho0 * self.c0**2.
@@ -107,6 +137,7 @@ class Dong2016CaseA1SquareParticleOnAl6061T6(Application):
         # print(self.boundary_equations)
 
     def add_user_options(self, group):
+        # we don't use this in this example
         group.add_argument("--azimuth-theta",
                            action="store",
                            type=float,
@@ -118,7 +149,7 @@ class Dong2016CaseA1SquareParticleOnAl6061T6(Application):
                            action="store",
                            type=float,
                            dest="vel_alpha",
-                           default=60,
+                           default=45.,
                            help="Angle at which the velocity vector is pointed")
 
         group.add_argument("--spacing",
@@ -126,14 +157,37 @@ class Dong2016CaseA1SquareParticleOnAl6061T6(Application):
                            type=float,
                            dest="spacing",
                            default=100,
-                           help="Spacing in nanometers")
+                           help="Spacing in micrometers")
+
+        group.add_argument("--samples",
+                           action="store",
+                           type=int,
+                           dest="samples",
+                           default=20000,
+                           help="samples (default to 3000)")
 
     def consume_user_options(self):
         # self.nu = self.options.nu
         self.vel_alpha = self.options.vel_alpha
-        self.azimuth_theta = self.options.azimuth_theta
+        # print("impact angle", self.vel_alpha)
 
-        self.dx = self.options.spacing * 1e-6
+        # ================================
+        # find the spacing
+        # ================================
+        self.samples = self.options.samples
+        xb, yb, zb = create_surface_particles_sphere(self.options.samples)
+
+        x_76 = xb[76]
+        y_76 = yb[76]
+        z_76 = zb[76]
+        xb[76] = 0.
+        yb[76] = 0.
+        zb[76] = 0.
+        d = ((xb - x_76)**2. + (yb - y_76)**2. + (zb - z_76)**2.)**0.5
+        self.spacing = min(d)
+
+        self.dx = self.spacing
+        print("spacing is", self.dx*1e6)
         self.hdx = 1.0
         self.h = self.hdx * self.dx
         self.rigid_body_spacing = self.dx
@@ -143,37 +197,29 @@ class Dong2016CaseA1SquareParticleOnAl6061T6(Application):
         self.edac_nu = self.edac_alpha * self.c0 * self.h / 8
 
         # compute the timestep
-        self.dt = 0.25 * self.h / ((self.E / self.rho0)**0.5 + 2.85)
-        # self.dt = 1e-9
+        # self.dt = 0.25 * self.h / ((self.E / self.rho0)**0.5 + 2.85)
+        self.dt = 2e-9
         print("timestep is ", self.dt)
 
-    def create_rigid_body(self):
-        # create a row of six cylinders
-        x, y = get_2d_block(self.dx, self.rigid_body_length,
-                            self.rigid_body_height)
-
-        body_id = np.array([], dtype=int)
-        for i in range(1):
-            b_id = np.ones(len(x), dtype=int) * i
-            body_id = np.concatenate((body_id, b_id))
-
-        return x, y, body_id
-
     def create_particles(self):
-        x, y = get_2d_block(self.dx, self.target_length + 6. * self.dx,
-                            self.target_height + 6. * self.dx)
+        x, y, z = get_3d_block(dx=self.spacing,
+                               length=self.target_length + 6. * self.dx,
+                               height=self.target_height + 6. * self.dx,
+                               depth=self.target_length + 6. * self.dx)
         x = x.ravel()
         y = y.ravel()
+        z = z.ravel()
 
         dx = self.dx
         hdx = self.hdx
-        m = self.rho0 * dx * dx
+        m = self.rho0 * dx**self.dim
         h = np.ones_like(x) * hdx * dx
         rho = self.rho0
         rad_s = self.dx / 2.
 
         target = get_particle_array(x=x,
                                     y=y,
+                                    z=z,
                                     m=m,
                                     rho=rho,
                                     h=h,
@@ -197,6 +243,8 @@ class Dong2016CaseA1SquareParticleOnAl6061T6(Application):
         min_y = min(target.y)
         min_x = min(target.x)
         max_x = max(target.x)
+        min_z = min(target.z)
+        max_z = max(target.z)
         for i in range(len(target.y)):
             if target.y[i] < min_y + 3. * self.dx:
                 indices.append(i)
@@ -204,23 +252,28 @@ class Dong2016CaseA1SquareParticleOnAl6061T6(Application):
                 indices.append(i)
             elif target.x[i] > max_x - 3. * self.dx:
                 indices.append(i)
+            elif target.z[i] < min_z + 3. * self.dx:
+                indices.append(i)
+            elif target.z[i] > max_z - 3. * self.dx:
+                indices.append(i)
+
         # add static particle data
         target.add_property('is_static')
         target.is_static[:] = 0.
         target.is_static[indices] = 1.
 
+        # ==================================
         # Create rigid body
-        xc, yc, body_id = self.create_rigid_body()
-        xc, yc, _zs = rotate(xc, yc, np.zeros(len(xc)), axis=np.array([0., 0., 1.]),
-                             angle=self.azimuth_theta)
+        # ==================================
+        xc, yc, zc = create_surface_particles_sphere(self.samples)
         yc += max(target.y) - min(yc) + 1.1 * self.dx
-        dem_id = body_id
-        m = self.rigid_body_rho * self.rigid_body_spacing**2
+        m = self.rigid_body_rho * self.rigid_body_spacing**self.dim
         h = 1.0 * self.dx
         rad_s = self.dx / 2.
         rigid_body = get_particle_array(name='rigid_body',
                                         x=xc,
                                         y=yc,
+                                        z=zc,
                                         h=h,
                                         m=m,
                                         rho=self.rigid_body_rho,
@@ -230,6 +283,17 @@ class Dong2016CaseA1SquareParticleOnAl6061T6(Application):
                                             'poisson_ratio': 0.3,
                                             'spacing0': self.dx,
                                         })
+
+        # ========================================
+        # remove particles which are not boundary
+        # ========================================
+        min_y = min(rigid_body.y)
+        indices = []
+        for i in range(len(rigid_body.y)):
+            if rigid_body.y[i] > min_y + 10. * 50. * 1e-6:
+                indices.append(i)
+        rigid_body.remove_particles(indices)
+
         dem_id = np.ones(len(rigid_body.x), dtype=int)
         body_id = np.zeros(len(rigid_body.x), dtype=int)
         rigid_body.add_property('dem_id', type='int', data=dem_id)
@@ -238,31 +302,58 @@ class Dong2016CaseA1SquareParticleOnAl6061T6(Application):
 
         self.scheme.setup_properties([target, rigid_body])
 
-        rigid_body.add_property('contact_force_is_boundary')
-        rigid_body.contact_force_is_boundary[:] = rigid_body.is_boundary[:]
-
-        vel = 51. * 2
+        vel = 18.
 
         angle = self.vel_alpha / 180 * np.pi
         self.scheme.scheme.set_linear_velocity(
             rigid_body, np.array([vel * cos(angle),
                                   -vel * sin(angle), 0.]))
+        self.scheme.scheme.set_angular_velocity(
+            rigid_body, np.array([0., 0., -1280]))
 
-        # self.scheme.scheme.set_angular_velocity(
-        #     rigid_body, np.array([0.0, 0.0, 10.]))
-        # remove particles which are not boundary
-        indices = []
-        for i in range(len(rigid_body.y)):
-            if rigid_body.is_boundary[i] == 0:
-                indices.append(i)
-        rigid_body.remove_particles(indices)
+        # set the boundary particles for this particular example as, we are only
+        # creating particles on the surface
+        rigid_body.is_boundary[:] = 1.
+        rigid_body.add_property('contact_force_is_boundary')
+        rigid_body.contact_force_is_boundary[:] = rigid_body.is_boundary[:]
 
+        # =======================================
+        # set the total mass, moment of inertia
+        # =======================================
+        radius = self.rigid_body_diameter / 2.
+        rigid_body.total_mass[:] = 4. / 3. * np.pi * radius**3. * self.rigid_body_rho
+        I = np.zeros(9)
+        I[0] = 2. / 5. * rigid_body.total_mass[:] * radius**2.
+        I[4] = 2. / 5. * rigid_body.total_mass[:] * radius**2.
+        I[8] = 2. / 5. * rigid_body.total_mass[:] * radius**2.
+        I[1] = 0.
+        I[2] = 0.
+        I[3] = 0.
+        I[5] = 0.
+        I[6] = 0.
+        I[7] = 0.
+        rigid_body.inertia_tensor_body_frame[:] = I[:]
+
+        I_inv = np.linalg.inv(I.reshape(3, 3))
+        I_inv = I_inv.ravel()
+        rigid_body.inertia_tensor_inverse_body_frame[:] = I_inv[:]
+
+        rigid_body.inertia_tensor_global_frame[:] = I[:]
+        rigid_body.inertia_tensor_inverse_global_frame[:] = I_inv[:]
+        # =======================================
+        # set the total mass, moment of inertia
+        # =======================================
+
+        # =======================================
         # setup Mie Grunieson of state parameters
+        # =======================================
         setup_mie_gruniesen_parameters(
             pa=target, mie_gruneisen_sigma=self.target_mie_gruneisen_gamma,
             mie_gruneisen_S=self.target_mie_gruneisen_S)
 
+        # =======================================
         # setup the Johnson-Cook parameters
+        # =======================================
         setup_johnson_cook_parameters(
             pa=target,
             JC_A=self.target_JC_A,
@@ -272,7 +363,9 @@ class Dong2016CaseA1SquareParticleOnAl6061T6(Application):
             JC_m=self.target_JC_m,
             JC_T_melt=self.target_JC_T_melt)
 
+        # =======================================
         # setup damage parameters
+        # =======================================
         setup_damage_parameters(
             pa=target,
             damage_1=self.target_damage_1,
@@ -280,7 +373,7 @@ class Dong2016CaseA1SquareParticleOnAl6061T6(Application):
             damage_3=self.target_damage_3,
             damage_4=self.target_damage_4,
             damage_5=self.target_damage_5)
-        target.yield_stress[:] = target.JC_A[0] * 4.
+        # target.yield_stress[:] = target.JC_A[0] * 4.
 
         return [target, rigid_body]
 
@@ -299,11 +392,12 @@ class Dong2016CaseA1SquareParticleOnAl6061T6(Application):
     def create_scheme(self):
         solid = SolidsScheme(solids=['target'],
                              rigid_bodies=['rigid_body'],
-                             dim=2,
+                             dim=self.dim,
                              h=self.h,
                              hdx=self.hdx,
                              artificial_vis_alpha=self.artificial_vis_alpha,
                              artificial_vis_beta=self.artificial_vis_beta,
+                             gy=0.,  # No change in the result
                              kr=1e12)
 
         s = SchemeChooser(default='solid', solid=solid)
@@ -321,9 +415,98 @@ class Dong2016CaseA1SquareParticleOnAl6061T6(Application):
         b.scalar = 'vmag'
         ''')
 
+    def get_boundary_particles_indices(self, x, y):
+        from boundary_particles import (
+            get_boundary_identification_etvf_equations,
+            add_boundary_identification_properties)
+        h = self.h
+        pa = get_particle_array(x=x, y=y, m=1., h=h, rho=self.rho0, name="body")
+
+        add_boundary_identification_properties(pa)
+        # make sure your rho is not zero
+        equations = get_boundary_identification_etvf_equations([pa.name],
+                                                               [pa.name])
+        # print(equations)
+
+        sph_eval = SPHEvaluator(arrays=[pa],
+                                equations=equations,
+                                dim=2,
+                                kernel=QuinticSpline(dim=2))
+
+        sph_eval.evaluate(dt=0.1)
+        return pa
+
+    def post_process(self, fname):
+        import matplotlib.pyplot as plt
+        # from matplotlib.patches import Rectangle
+        # from pysph.solver.utils import load, get_files
+        # from pysph.solver.utils import load
+
+        # info = self.read_info(fname)
+        # output_files = self.output_files
+
+        # from pysph.solver.utils import iter_output
+
+        # t = []
+
+        data = load(self.output_files[0])
+        particle_arrays = data['arrays']
+        # solver_data = data['solver_data']
+
+        target = particle_arrays['target']
+        x_0 = target.x
+        y_0 = target.y
+        z_0 = target.z
+
+        data = load(self.output_files[-1])
+        particle_arrays = data['arrays']
+        # solver_data = data['solver_data']
+
+        target = particle_arrays['target']
+
+        displacement = y_0 - target.y
+
+        disp_neg = []
+        for val in displacement:
+            # if val > 0.:
+            disp_neg.append(val)
+
+        deformation_index = np.where(disp_neg == max(disp_neg))[0]
+        print("Max displacement is", max(disp_neg)*1e6)
+
+        indices = np.where(z_0 == z_0[deformation_index])
+        x_deformed = target.x[indices]
+        y_deformed = target.y[indices]
+        z_deformed = target.z[indices]
+        pa = self.get_boundary_particles_indices(x_deformed,
+                                                 y_deformed)
+        boundary_indices = np.where(pa.is_boundary == 1)
+        x_deformed_surface = x_deformed[boundary_indices]
+        y_deformed_surface = y_deformed[boundary_indices]
+
+        indices = []
+        for i in range(len(x_deformed_surface)):
+            if y_deformed_surface[i] > 0.:
+                if x_deformed_surface[i] > -0.0015 and x_deformed_surface[i] < 0.0015:
+                    indices.append(i)
+
+        plt.title('Particle plot')
+        plt.xlabel('x')
+        plt.ylabel('y')
+        plt.scatter(x_deformed_surface[indices]*1e6, y_deformed_surface[indices]*1e6)
+        # plt.axes().set_aspect('equal', 'datalim')
+        plt.legend()
+        plt.ylim(450, 570)
+        fig = os.path.join(os.path.dirname(fname), "topology.png")
+        plt.savefig(fig, dpi=300)
+        plt.show()
+        # # ========================
+        # # x amplitude figure
+        # # ========================
+
 
 if __name__ == '__main__':
-    app = Dong2016CaseA1SquareParticleOnAl6061T6()
+    app = CaoXuerui2022SphericalParticleImpact3D()
 
     app.run()
-    # app.post_process(app.info_filename)
+    app.post_process(app.info_filename)

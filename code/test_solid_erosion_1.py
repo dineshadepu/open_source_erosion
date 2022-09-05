@@ -43,6 +43,10 @@ class TestSolidErosion1(Application):
         self.hdx = 1.0
         self.h = self.hdx * self.dx
 
+        # target mie-Gruneisen parameters
+        self.target_mie_gruneisen_gamma = 2.17
+        self.target_mie_gruneisen_S = 1.49
+
         # geometry
         self.target_length = 0.04
         self.target_height = 0.02
@@ -54,6 +58,7 @@ class TestSolidErosion1(Application):
         self.target_JC_n = 1.
         self.target_JC_m = 1.
         self.target_JC_T_melt = 1000
+        self.target_specific_heat = 875
 
         # setup target damage parameters
         self.target_damage_1 = -0.77
@@ -202,7 +207,6 @@ class TestSolidErosion1(Application):
         xc, yc, body_id = self.create_rigid_body()
         xc, yc, _zs = rotate(xc, yc, np.zeros(len(xc)), axis=np.array([0., 0., 1.]), angle=45.)
         yc += max(target.y) - min(yc) + 4. * self.dx
-        dem_id = body_id
         m = self.rigid_body_rho * self.rigid_body_spacing**2
         h = 1.0 * self.dx
         rad_s = self.dx / 2.
@@ -245,7 +249,9 @@ class TestSolidErosion1(Application):
         rigid_body.remove_particles(indices)
 
         # setup Mie Grunieson of state parameters
-        setup_mie_gruniesen_parameters(target, 1., 1., 2.)
+        setup_mie_gruniesen_parameters(
+            pa=target, mie_gruneisen_sigma=self.target_mie_gruneisen_gamma,
+            mie_gruneisen_S=self.target_mie_gruneisen_S)
 
         # setup the Johnson-Cook parameters
         setup_johnson_cook_parameters(
@@ -276,7 +282,7 @@ class TestSolidErosion1(Application):
         output = np.array([0.0, 1.38 * 1e-3, 5.17 * 1e-3, 7.38 * 1e-3, 11.462 *
                            1e-3, 15.4 * 1e-3])
 
-        pfreq = 300
+        pfreq = 20
 
         self.scheme.configure_solver(dt=dt, tf=tf, pfreq=pfreq,
                                      output_at_times=output)

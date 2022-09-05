@@ -20,22 +20,169 @@ from pysph.sph.integrator_step import IntegratorStep
 from pysph.base.kernels import (QuinticSpline)
 
 from pysph.sph.wc.gtvf import GTVFIntegrator
-from rigid_body_common import (set_total_mass, set_center_of_mass,
-                               set_body_frame_position_vectors,
-                               set_body_frame_normal_vectors,
-                               set_moment_of_inertia_and_its_inverse,
-                               BodyForce, SumUpExternalForces,
-                               normalize_R_orientation, RigidBodyLVC,
-                               RigidBodyDongRigidRigid,
-                               RigidBodyDongRigidWall,
-                               ComputeContactForceNormals,
-                               ComputeContactForceDistanceAndClosestPoint,
-                               ComputeContactForce)
+from rigid_body_common import (
+    add_properties_stride,
+    set_total_mass, set_center_of_mass,
+    set_body_frame_position_vectors,
+    set_body_frame_normal_vectors,
+    set_moment_of_inertia_and_its_inverse,
+    BodyForce, SumUpExternalForces,
+    normalize_R_orientation,
+    ComputeContactForceNormalsMohseniRB,
+    ComputeContactForceDistanceAndClosestPointMohseniRB,
+    ComputeContactForceMohseniRB,
+    TransferContactForceMohseniRB)
 
 # compute the boundary particles
 from boundary_particles import (get_boundary_identification_etvf_equations,
                                 add_boundary_identification_properties)
 from numpy import sin, cos
+
+
+class GTVFTool3DStep(IntegratorStep):
+    def stage1(self, d_idx, d_x, d_y, d_z, d_u, d_v, d_w, d_dx0, d_dy0, d_dz0,
+               d_xcm, d_vcm, d_R, d_omega, d_body_id, d_is_boundary):
+        # Update the velocities to 1/2. time step
+        # some variables to update the positions seamlessly
+
+        bid, i9, i3, = declare('int', 3)
+        bid = d_body_id[d_idx]
+        i9 = 9 * bid
+        i3 = 3 * bid
+
+        ###########################
+        # Update position vectors #
+        ###########################
+        # rotate the position of the vector in the body frame to global frame
+        dx = (d_R[i9 + 0] * d_dx0[d_idx] + d_R[i9 + 1] * d_dy0[d_idx] +
+              d_R[i9 + 2] * d_dz0[d_idx])
+        dy = (d_R[i9 + 3] * d_dx0[d_idx] + d_R[i9 + 4] * d_dy0[d_idx] +
+              d_R[i9 + 5] * d_dz0[d_idx])
+        dz = (d_R[i9 + 6] * d_dx0[d_idx] + d_R[i9 + 7] * d_dy0[d_idx] +
+              d_R[i9 + 8] * d_dz0[d_idx])
+
+        ###########################
+        # Update velocity vectors #
+        ###########################
+        # here du, dv, dw are velocities due to angular velocity
+        # dV = omega \cross dr
+        # where dr = x - cm
+        du = d_omega[i3 + 1] * dz - d_omega[i3 + 2] * dy
+        dv = d_omega[i3 + 2] * dx - d_omega[i3 + 0] * dz
+        dw = d_omega[i3 + 0] * dy - d_omega[i3 + 1] * dx
+
+        d_u[d_idx] = d_vcm[i3 + 0] + du
+        d_v[d_idx] = d_vcm[i3 + 1] + dv
+        d_w[d_idx] = d_vcm[i3 + 2] + dw
+
+    def py_stage2(self, dst, t, dt):
+        # move positions to t + dt time step
+        for i in range(dst.nb[0]):
+            i3 = 3 * i
+            i9 = 9 * i
+            for j in range(3):
+                # using velocity at t, move position
+                # to t + dt/2.
+                dst.xcm[i3 + j] = dst.xcm[i3 + j] + dt * dst.vcm[i3 + j]
+
+            # angular velocity in terms of matrix
+            omega_mat = np.array([[0, -dst.omega[i3 + 2], dst.omega[i3 + 1]],
+                                  [dst.omega[i3 + 2], 0, -dst.omega[i3 + 0]],
+                                  [-dst.omega[i3 + 1], dst.omega[i3 + 0], 0]])
+
+            # Currently the orientation is at time t
+            R = dst.R[i9:i9 + 9].reshape(3, 3)
+
+            # Rate of change of orientation is
+            r_dot = np.matmul(omega_mat, R)
+            r_dot = r_dot.ravel()
+
+            # update the orientation to next time step
+            dst.R[i9:i9 + 9] = dst.R[i9:i9 + 9] + r_dot * dt
+
+            # normalize the orientation using Gram Schmidt process
+            normalize_R_orientation(dst.R[i9:i9 + 9])
+
+            # update the moment of inertia
+            R = dst.R[i9:i9 + 9].reshape(3, 3)
+            R_t = R.transpose()
+            tmp = np.matmul(
+                R,
+                dst.inertia_tensor_inverse_body_frame[i9:i9 + 9].reshape(3, 3))
+            dst.inertia_tensor_inverse_global_frame[i9:i9 + 9] = (np.matmul(
+                tmp, R_t)).ravel()[:]
+
+    def stage2(self, d_idx, d_x, d_y, d_z, d_u, d_v, d_w, d_dx0, d_dy0, d_dz0,
+               d_xcm, d_vcm, d_R, d_omega, d_body_id, d_normal0, d_normal,
+               d_is_boundary):
+        # some variables to update the positions seamlessly
+        bid, i9, i3, idx3 = declare('int', 4)
+        bid = d_body_id[d_idx]
+        idx3 = 3 * d_idx
+        i9 = 9 * bid
+        i3 = 3 * bid
+
+        ###########################
+        # Update position vectors #
+        ###########################
+        # rotate the position of the vector in the body frame to global frame
+        dx = (d_R[i9 + 0] * d_dx0[d_idx] + d_R[i9 + 1] * d_dy0[d_idx] +
+              d_R[i9 + 2] * d_dz0[d_idx])
+        dy = (d_R[i9 + 3] * d_dx0[d_idx] + d_R[i9 + 4] * d_dy0[d_idx] +
+              d_R[i9 + 5] * d_dz0[d_idx])
+        dz = (d_R[i9 + 6] * d_dx0[d_idx] + d_R[i9 + 7] * d_dy0[d_idx] +
+              d_R[i9 + 8] * d_dz0[d_idx])
+
+        d_x[d_idx] = d_xcm[i3 + 0] + dx
+        d_y[d_idx] = d_xcm[i3 + 1] + dy
+        d_z[d_idx] = d_xcm[i3 + 2] + dz
+
+        # update normal vectors of the boundary
+        if d_is_boundary[d_idx] == 1:
+            d_normal[idx3 + 0] = (d_R[i9 + 0] * d_normal0[idx3] +
+                                  d_R[i9 + 1] * d_normal0[idx3 + 1] +
+                                  d_R[i9 + 2] * d_normal0[idx3 + 2])
+            d_normal[idx3 + 1] = (d_R[i9 + 3] * d_normal0[idx3] +
+                                  d_R[i9 + 4] * d_normal0[idx3 + 1] +
+                                  d_R[i9 + 5] * d_normal0[idx3 + 2])
+            d_normal[idx3 + 2] = (d_R[i9 + 6] * d_normal0[idx3] +
+                                  d_R[i9 + 7] * d_normal0[idx3 + 1] +
+                                  d_R[i9 + 8] * d_normal0[idx3 + 2])
+
+    def stage3(self, d_idx, d_x, d_y, d_z, d_u, d_v, d_w, d_dx0, d_dy0, d_dz0,
+               d_xcm, d_vcm, d_R, d_omega, d_body_id, d_is_boundary):
+        # Update the velocities to 1/2. time step
+        # some variables to update the positions seamlessly
+
+        bid, i9, i3, = declare('int', 3)
+        bid = d_body_id[d_idx]
+        i9 = 9 * bid
+        i3 = 3 * bid
+
+        ###########################
+        # Update position vectors #
+        ###########################
+        # rotate the position of the vector in the body frame to global frame
+        dx = (d_R[i9 + 0] * d_dx0[d_idx] + d_R[i9 + 1] * d_dy0[d_idx] +
+              d_R[i9 + 2] * d_dz0[d_idx])
+        dy = (d_R[i9 + 3] * d_dx0[d_idx] + d_R[i9 + 4] * d_dy0[d_idx] +
+              d_R[i9 + 5] * d_dz0[d_idx])
+        dz = (d_R[i9 + 6] * d_dx0[d_idx] + d_R[i9 + 7] * d_dy0[d_idx] +
+              d_R[i9 + 8] * d_dz0[d_idx])
+
+        ###########################
+        # Update velocity vectors #
+        ###########################
+        # here du, dv, dw are velocities due to angular velocity
+        # dV = omega \cross dr
+        # where dr = x - cm
+        du = d_omega[i3 + 1] * dz - d_omega[i3 + 2] * dy
+        dv = d_omega[i3 + 2] * dx - d_omega[i3 + 0] * dz
+        dw = d_omega[i3 + 0] * dy - d_omega[i3 + 1] * dx
+
+        d_u[d_idx] = d_vcm[i3 + 0] + du
+        d_v[d_idx] = d_vcm[i3 + 1] + dv
+        d_w[d_idx] = d_vcm[i3 + 2] + dw
 
 
 class GTVFRigidBody3DStep(IntegratorStep):
@@ -655,16 +802,16 @@ class RigidBody3DScheme(Scheme):
             g5 = []
             for name in self.rigid_bodies:
                 g5.append(
-                    ComputeContactForceNormals(dest=name,
-                                               sources=self.boundaries))
+                    ComputeContactForceNormalsMohseniRB(
+                        dest=name, sources=self.rigid_bodies+self.boundaries))
 
             stage2.append(Group(equations=g5, real=False))
 
             g5 = []
             for name in self.rigid_bodies:
                 g5.append(
-                    ComputeContactForceDistanceAndClosestPoint(
-                        dest=name, sources=self.boundaries))
+                    ComputeContactForceDistanceAndClosestPointMohseniRB(
+                        dest=name, sources=self.rigid_bodies+self.boundaries))
             stage2.append(Group(equations=g5, real=False))
 
         if len(self.rigid_bodies) > 0:
@@ -681,19 +828,20 @@ class RigidBody3DScheme(Scheme):
             g5 = []
             for name in self.rigid_bodies:
                 g5.append(
-                    ComputeContactForce(dest=name,
-                                        sources=None,
-                                        kr=self.kr,
-                                        kf=self.kf,
-                                        fric_coeff=self.fric_coeff))
+                    ComputeContactForceMohseniRB(
+                        dest=name,
+                        sources=None,
+                        kr=self.kr,
+                        kf=self.kf,
+                        fric_coeff=self.fric_coeff))
 
-            # for name in self.rigid_bodies:
-            #     g5.append(RigidBodyDongRigidRigid(dest=name,
-            #                                       sources=self.rigid_bodies))
+            stage2.append(Group(equations=g5, real=False))
 
-            #     if len(self.boundaries) > 0:
-            #         g5.append(RigidBodyDongRigidWall(dest=name,
-            #                                          sources=self.boundaries))
+            g5 = []
+            for name in self.rigid_bodies:
+                g5.append(
+                    TransferContactForceMohseniRB(
+                        dest=name, sources=self.rigid_bodies))
 
             stage2.append(Group(equations=g5, real=False))
 
@@ -745,38 +893,45 @@ class RigidBody3DScheme(Scheme):
 
             # properties to find the find on the rigid body by
             # Mofidi, Drescher, Emden, Teschner
-            add_properties(pa, 'contact_force_normal_x',
-                           'contact_force_normal_y',
-                           'contact_force_normal_z',
-                           'contact_force_normal_wij',
+            add_properties_stride(pa, pa.total_no_bodies[0],
+                                  'contact_force_normal_x',
+                                  'contact_force_normal_y',
+                                  'contact_force_normal_z',
+                                  'contact_force_normal_wij',
 
-                           'contact_force_normal_tmp_x',
-                           'contact_force_normal_tmp_y',
-                           'contact_force_normal_tmp_z',
+                                  'contact_force_normal_tmp_x',
+                                  'contact_force_normal_tmp_y',
+                                  'contact_force_normal_tmp_z',
 
-                           'contact_force_dist_tmp',
-                           'contact_force_dist',
+                                  'contact_force_dist_tmp',
+                                  'contact_force_dist',
 
-                           'overlap',
-                           'ft_x',
-                           'ft_y',
-                           'ft_z',
-                           'fn_x',
-                           'fn_y',
-                           'fn_z',
-                           'delta_lt_x',
-                           'delta_lt_y',
-                           'delta_lt_z',
-                           'vx_source',
-                           'vy_source',
-                           'vz_source',
-                           'x_source',
-                           'y_source',
-                           'z_source',
-                           'ti_x',
-                           'ti_y',
-                           'ti_z',
-                           'closest_point_dist_to_source')
+                                  'overlap',
+                                  'ft_x',
+                                  'ft_y',
+                                  'ft_z',
+                                  'fn_x',
+                                  'fn_y',
+                                  'fn_z',
+                                  'delta_lt_x',
+                                  'delta_lt_y',
+                                  'delta_lt_z',
+                                  'vx_source',
+                                  'vy_source',
+                                  'vz_source',
+                                  'x_source',
+                                  'y_source',
+                                  'z_source',
+                                  'ti_x',
+                                  'ti_y',
+                                  'ti_z',
+                                  'closest_point_dist_to_source')
+
+            pa.add_property(name='dem_id_source', stride=pa.total_no_bodies[0],
+                            type='int')
+            pa.add_property(name='idx_source',
+                            stride=pa.total_no_bodies[0],
+                            type='int')
 
             add_properties(pa, 'fx', 'fy', 'fz', 'dx0', 'dy0', 'dz0')
 

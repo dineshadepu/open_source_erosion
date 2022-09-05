@@ -523,6 +523,54 @@ class Rushdie2019TaylorImpactTest3DPart1(Problem):
         plt.close()
 
 
+class Niu2018OrthogonalCuttingProcessA2024T351(Problem):
+    def get_name(self):
+        return 'niu_2018_orthogonal_cutting_process_A2024_T351'
+
+    def setup(self):
+        get_path = self.input_path
+
+        cmd = 'python code/niu_2018_orthogonal_cutting_process_A2024_T351.py' + backend
+
+        # Base case info
+        self.case_info = {
+            'dx_50': (dict(
+                # simulation specific args
+                velocity=50.,
+                spacing=1. * 1e-3 / 50,
+                feeding_length=0.5 * 1e-3,
+
+                # scheme related args
+                kr=5e12,
+                no_mie_gruneisen_eos=None,
+                pfreq=300,
+                ), 'N=50'),
+
+            'dx_100': (dict(
+                # simulation specific args
+                velocity=50.,
+                spacing=1. * 1e-3 / 100,
+                feeding_length=0.5 * 1e-3,
+
+                # scheme related args
+                kr=5e12,
+                no_mie_gruneisen_eos=None,
+                pfreq=300,
+                ), 'N=100'),
+        }
+
+        self.cases = [
+            Simulation(get_path(name), cmd,
+                       job_info=dict(n_core=n_core,
+                                     n_thread=n_thread), cache_nnps=None,
+                       **scheme_opts(self.case_info[name][0]))
+            for name in self.case_info
+        ]
+
+    def run(self):
+        self.make_output_dir()
+
+
 class TestSolidErosion1(Problem):
     def get_name(self):
         return 'test_solid_erosion_1'
@@ -687,6 +735,359 @@ class Vyas2022DeformationValidation(Problem):
         self.make_output_dir()
 
 
+class Vyas2021ReboundKinematics(Problem):
+    def get_name(self):
+        return 'vyas_2021_rebound_kinematics'
+
+    def setup(self):
+        get_path = self.input_path
+
+        cmd = 'python code/vyas_2021_rebound_kinematics.py' + backend
+
+        samples = 1000
+        # E = 70 * 1e9
+        # nu = 0.3
+        # G = E / (2. * (1. + nu))
+        # E_star = E / (2. * (1. - nu**2.))
+
+        fric_coeff = 0.1
+        kr = 1e8
+        kf = 1e6
+
+        dt = 1e-7
+        # Base case info
+        self.case_info = {
+            'angle_2': (dict(
+                samples=samples,
+                velocity=5.,
+                angle=2.,
+                kr=kr,
+                kf=kf,
+                fric_coeff=fric_coeff,
+                timestep=dt,
+                ), 'Angle=2.'),
+
+            'angle_5': (dict(
+                samples=samples,
+                velocity=5.,
+                angle=5.,
+                kr=kr,
+                kf=kf,
+                fric_coeff=fric_coeff,
+                timestep=dt,
+                ), 'Angle=5.'),
+
+            'angle_10': (dict(
+                samples=samples,
+                velocity=5.,
+                angle=10.,
+                kr=kr,
+                kf=kf,
+                fric_coeff=fric_coeff,
+                timestep=dt,
+                ), 'Angle=10.'),
+
+            'angle_15': (dict(
+                samples=samples,
+                velocity=5.,
+                angle=15.,
+                kr=kr,
+                kf=kf,
+                fric_coeff=fric_coeff,
+                timestep=dt,
+                ), 'Angle=15.'),
+
+            'angle_20': (dict(
+                samples=samples,
+                velocity=5.,
+                angle=20.,
+                kr=kr,
+                kf=kf,
+                fric_coeff=fric_coeff,
+                timestep=dt,
+                ), 'Angle=20.'),
+
+            'angle_25': (dict(
+                samples=samples,
+                velocity=5.,
+                angle=25.,
+                kr=kr,
+                kf=kf,
+                fric_coeff=fric_coeff,
+                timestep=dt,
+                ), 'Angle=25.'),
+
+            'angle_30': (dict(
+                samples=samples,
+                velocity=5.,
+                angle=30.,
+                kr=kr,
+                kf=kf,
+                fric_coeff=fric_coeff,
+                timestep=dt,
+                ), 'Angle=30.'),
+
+            'angle_35': (dict(
+                samples=samples,
+                velocity=5.,
+                angle=35.,
+                kr=kr,
+                kf=kf,
+                fric_coeff=fric_coeff,
+                timestep=dt,
+                ), 'Angle=35.'),
+
+            'angle_40': (dict(
+                samples=samples,
+                velocity=5.,
+                angle=40.,
+                kr=kr,
+                kf=kf,
+                fric_coeff=fric_coeff,
+                timestep=dt,
+                ), 'Angle=40.'),
+
+            'angle_45': (dict(
+                samples=samples,
+                velocity=5.,
+                angle=45.,
+                kr=kr,
+                kf=kf,
+                fric_coeff=fric_coeff,
+                timestep=dt,
+                ), 'Angle=45.'),
+
+            # 'angle_60': (dict(
+            #     samples=samples,
+            #     velocity=5.,
+            #     angle=60.,
+            #     fric_coeff=fric_coeff,
+            #     ), 'Angle=60.'),
+
+            # 'angle_70': (dict(
+            #     samples=samples,
+            #     velocity=5.,
+            #     angle=70.,
+            #     fric_coeff=fric_coeff,
+            #     ), 'Angle=70.'),
+
+            # 'angle_80': (dict(
+            #     samples=samples,
+            #     velocity=5.,
+            #     angle=80.,
+            #     fric_coeff=fric_coeff,
+            #     ), 'Angle=80.'),
+        }
+
+        self.cases = [
+            Simulation(get_path(name), cmd,
+                       job_info=dict(n_core=n_core,
+                                     n_thread=n_thread), cache_nnps=None,
+                       **scheme_opts(self.case_info[name][0]))
+            for name in self.case_info
+        ]
+
+    def run(self):
+        self.make_output_dir()
+        self.plot_theta_vs_omega()
+
+    def plot_theta_vs_omega(self):
+        data = {}
+        for name in self.case_info:
+            data[name] = np.load(self.input_path(name, 'results.npz'))
+            theta_exp = data[name]['theta_exp']
+            omega_exp = data[name]['omega_exp']
+
+        non_dim_theta = []
+        non_dim_omega = []
+
+        for name in self.case_info:
+            non_dim_theta.append(data[name]['non_dim_theta'])
+            non_dim_omega.append(data[name]['non_dim_omega'])
+
+        plt.plot(non_dim_theta, non_dim_omega, '^-', label='Simulated')
+        plt.plot(theta_exp, omega_exp, 'v-', label='Thornton')
+        plt.xlabel('non dimensional theta')
+        plt.ylabel('non dimensional Omega')
+        plt.legend(prop={'size': 12})
+        # plt.tight_layout(pad=0)
+        plt.savefig(self.output_path('theta_vs_omega.pdf'))
+        plt.clf()
+        plt.close()
+
+
+class Dong2016CaseA1SquareParticleOnAl6061T6(Problem):
+    def get_name(self):
+        return 'dong_2016_4_1_case_A_1_square_particle_erosion_on_al6061_t6'
+
+    def setup(self):
+        get_path = self.input_path
+
+        cmd = 'python code/dong_2016_4_1_case_A_1_square_particle_erosion_on_al6061_t6.py' + backend
+
+        # Base case info
+        self.case_info = {
+            'dx_100': (dict(
+                scheme='solid',
+                detail=None,
+                pfreq=50,
+                kr=1e11,
+                fric_coeff=0.1,
+                vel_alpha=30.,
+                azimuth_theta=-5.,
+                tf=35*1e-6,
+                ), 'dx_100'),
+
+            'dx_50': (dict(
+                scheme='solid',
+                detail=None,
+                pfreq=100,
+                kr=1e11,
+                fric_coeff=0.1,
+                vel_alpha=30.,
+                azimuth_theta=-5.,
+                spacing=50.,
+                tf=35*1e-6,
+                ), 'dx_100'),
+        }
+
+        self.cases = [
+            Simulation(get_path(name), cmd,
+                       job_info=dict(n_core=n_core,
+                                     n_thread=n_thread), cache_nnps=None,
+                       **scheme_opts(self.case_info[name][0]))
+            for name in self.case_info
+        ]
+
+    def run(self):
+        self.make_output_dir()
+
+
+class CaoXuerui2022SphericalParticleImpact2D(Problem):
+    def get_name(self):
+        return 'cao_xuerui_2022_spherical_particle_impact_2d'
+
+    def setup(self):
+        get_path = self.input_path
+
+        cmd = 'python code/cao_xuerui_2022_spherical_particle_impact_2d.py' + backend
+
+        # Base case info
+        self.case_info = {
+            'dx_100': (dict(
+                scheme='solid',
+                detail=None,
+                pfreq=50,
+                kr=1e11,
+                fric_coeff=0.1,
+                vel_alpha=45.,
+                azimuth_theta=-5.,
+                tf=15*1e-6,
+                ), 'dx_100'),
+
+            'dx_50': (dict(
+                scheme='solid',
+                detail=None,
+                pfreq=100,
+                kr=1e11,
+                fric_coeff=0.1,
+                vel_alpha=45.,
+                azimuth_theta=-5.,
+                spacing=50.,
+                tf=15*1e-6,
+                ), 'dx_50'),
+        }
+
+        self.cases = [
+            Simulation(get_path(name), cmd,
+                       job_info=dict(n_core=n_core,
+                                     n_thread=n_thread), cache_nnps=None,
+                       **scheme_opts(self.case_info[name][0]))
+            for name in self.case_info
+        ]
+
+    def run(self):
+        self.make_output_dir()
+
+
+class RigidRigidInteractionExample1(Problem):
+    def get_name(self):
+        return 'rigid_rigid_interaction_example_1'
+
+    def setup(self):
+        get_path = self.input_path
+
+        cmd = 'python code/rigid_rigid_interaction_example_1.py' + backend
+
+        # Base case info
+        self.case_info = {
+            'case_1': (dict(
+                scheme='rb3d',
+                pfreq=100,
+                kr=1e7,
+                fric_coeff=0.1,
+                tf=0.5,
+                ), 'Case 1'),
+        }
+
+        self.cases = [
+            Simulation(get_path(name), cmd,
+                       job_info=dict(n_core=n_core,
+                                     n_thread=n_thread), cache_nnps=None,
+                       **scheme_opts(self.case_info[name][0]))
+            for name in self.case_info
+        ]
+
+    def run(self):
+        self.make_output_dir()
+
+
+class MultiBodyErosionExamle1(Problem):
+    def get_name(self):
+        return 'multi_body_erosion_example_1'
+
+    def setup(self):
+        get_path = self.input_path
+
+        cmd = 'python code/multi_body_erosion_example_1.py' + backend
+
+        # Base case info
+        self.case_info = {
+            'dx_100': (dict(
+                scheme='solid',
+                detail=None,
+                pfreq=100,
+                kr=1e11,
+                fric_coeff=0.1,
+                vel_alpha=30.,
+                azimuth_theta=-5.,
+                tf=100*1e-6,
+                ), 'dx_100'),
+
+            # 'dx_50': (dict(
+            #     scheme='solid',
+            #     detail=None,
+            #     pfreq=100,
+            #     kr=1e11,
+            #     fric_coeff=0.1,
+            #     vel_alpha=30.,
+            #     azimuth_theta=-5.,
+            #     spacing=50.,
+            #     tf=35*1e-6,
+            #     ), 'dx_100'),
+        }
+
+        self.cases = [
+            Simulation(get_path(name), cmd,
+                       job_info=dict(n_core=n_core,
+                                     n_thread=n_thread), cache_nnps=None,
+                       **scheme_opts(self.case_info[name][0]))
+            for name in self.case_info
+        ]
+
+    def run(self):
+        self.make_output_dir()
+
 if __name__ == '__main__':
     PROBLEMS = [TestRigidBodyCollision1,
                 Mohseni2021ControlledSlidingOnAFlatSurface,
@@ -696,8 +1097,18 @@ if __name__ == '__main__':
                 Shuangshuang2021TaylorImpactTest3D,
                 Rushdie2019TaylorImpactTest3DPart1,
 
+                # Machining simulations
+                Niu2018OrthogonalCuttingProcessA2024T351,
+
                 TestSolidErosion1,
-                Vyas2022DeformationValidation]
+                Vyas2022DeformationValidation,
+                Vyas2021ReboundKinematics,
+
+                # Main benchmarks
+                Dong2016CaseA1SquareParticleOnAl6061T6,
+                Dong2016CaseA1SquareParticleOnAl6061T6,
+                RigidRigidInteractionExample1,
+                MultiBodyErosionExamle1]
 
     automator = Automator(
         simulation_dir='outputs',
