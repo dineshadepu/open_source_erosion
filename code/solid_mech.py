@@ -844,11 +844,129 @@ class SetDamagedParticlesStressToZero(Equation):
             d_sigma22[d_idx] = 0.
 
 
+class SetHIJForInsideParticles(Equation):
+    def __init__(self, dest, sources, h, kernel_factor):
+        # h value of usual particle
+        self.h = h
+        # depends on the kernel used
+        self.kernel_factor = kernel_factor
+        super(SetHIJForInsideParticles, self).__init__(dest, sources)
+
+    def initialize(self, d_idx, d_h_b, d_h):
+        # back ground pressure h (This will be the usual h value)
+        d_h_b[d_idx] = d_h[d_idx]
+
+    def loop_all(self, d_idx, d_x, d_y, d_z, d_rho, d_h, d_is_boundary,
+                 d_normal, d_normal_norm, d_h_b, s_m, s_x, s_y, s_z, s_h,
+                 s_is_boundary, SPH_KERNEL, NBRS, N_NBRS):
+        i = declare('int')
+        s_idx = declare('int')
+        xij = declare('matrix(3)')
+
+        # if the particle is boundary set it's h_b to be zero
+        if d_is_boundary[d_idx] == 1:
+            d_h_b[d_idx] = 0.
+        # if it is not the boundary then set its h_b according to the minimum
+        # distance to the boundary particle
+        else:
+            # get the minimum distance to the boundary particle
+            min_dist = 0
+            for i in range(N_NBRS):
+                s_idx = NBRS[i]
+
+                if s_is_boundary[s_idx] == 1:
+                    # find the distance
+                    xij[0] = d_x[d_idx] - s_x[s_idx]
+                    xij[1] = d_y[d_idx] - s_y[s_idx]
+                    xij[2] = d_z[d_idx] - s_z[s_idx]
+                    rij = sqrt(xij[0]**2. + xij[1]**2. + xij[2]**2.)
+
+                    if rij > min_dist:
+                        min_dist = rij
+
+            # doing this out of desperation
+            for i in range(N_NBRS):
+                s_idx = NBRS[i]
+
+                if s_is_boundary[s_idx] == 1:
+                    # find the distance
+                    xij[0] = d_x[d_idx] - s_x[s_idx]
+                    xij[1] = d_y[d_idx] - s_y[s_idx]
+                    xij[2] = d_z[d_idx] - s_z[s_idx]
+                    rij = sqrt(xij[0]**2. + xij[1]**2. + xij[2]**2.)
+
+                    if rij < min_dist:
+                        min_dist = rij
+
+            if min_dist > 0.:
+                d_h_b[d_idx] = min_dist / self.kernel_factor + min_dist / 50
+
+
+class ComputeAuHatETVFSun2019Solid(Equation):
+    def __init__(self, dest, sources, mach_no, u_max):
+        self.mach_no = mach_no
+        self.u_max = u_max
+        super(ComputeAuHatETVFSun2019Solid, self).__init__(dest, sources)
+
+    def initialize(self, d_idx, d_auhat, d_avhat, d_awhat):
+        d_auhat[d_idx] = 0.0
+        d_avhat[d_idx] = 0.0
+        d_awhat[d_idx] = 0.0
+
+    def loop(self, d_idx, s_idx, s_rho, s_m, d_h, d_auhat, d_avhat, d_awhat,
+             d_c0_ref, d_wdeltap, d_n, WIJ, SPH_KERNEL, DWIJ, XIJ, RIJ, dt):
+        fab = 0.
+        # this value is directly taken from the paper
+        R = 0.2
+
+        if d_wdeltap[0] > 0.:
+            fab = WIJ / d_wdeltap[0]
+            fab = pow(fab, d_n[0])
+
+        tmp = self.mach_no * d_c0_ref[0] * 2. * d_h[d_idx] / dt
+        # tmp = self.mach_no * d_c0_ref[0] * 2. * d_h[d_idx]
+
+        tmp1 = s_m[s_idx] / s_rho[s_idx]
+
+        d_auhat[d_idx] -= tmp * tmp1 * (1. + R * fab) * DWIJ[0]
+        d_avhat[d_idx] -= tmp * tmp1 * (1. + R * fab) * DWIJ[1]
+        d_awhat[d_idx] -= tmp * tmp1 * (1. + R * fab) * DWIJ[2]
+
+    def post_loop(self, d_idx, d_rho, d_h_b, d_h, d_normal, d_auhat, d_avhat,
+                  d_awhat, d_is_boundary, d_rho_ref, dt):
+        idx3 = declare('int')
+        idx3 = 3 * d_idx
+
+        if d_h_b[d_idx] < d_h[d_idx]:
+            if d_is_boundary[d_idx] == 1:
+                # since it is boundary make its shifting acceleration zero
+                d_auhat[d_idx] = 0.
+                d_avhat[d_idx] = 0.
+                d_awhat[d_idx] = 0.
+            else:
+                # implies this is a particle adjacent to boundary particle
+
+                # check if the particle is going away from the continuum
+                # or into the continuum
+                au_dot_normal = (d_auhat[d_idx] * d_normal[idx3] +
+                                 d_avhat[d_idx] * d_normal[idx3 + 1] +
+                                 d_awhat[d_idx] * d_normal[idx3 + 2])
+
+                # remove the normal acceleration component
+                if au_dot_normal > 0.:
+                    d_auhat[d_idx] -= au_dot_normal * d_normal[idx3]
+                    d_avhat[d_idx] -= au_dot_normal * d_normal[idx3 + 1]
+                    d_awhat[d_idx] -= au_dot_normal * d_normal[idx3 + 2]
+                # d_auhat[d_idx] -= au_dot_normal * d_normal[idx3]
+                # d_avhat[d_idx] -= au_dot_normal * d_normal[idx3 + 1]
+                # d_awhat[d_idx] -= au_dot_normal * d_normal[idx3 + 2]
+
+
 class SolidsScheme(Scheme):
     def __init__(self, solids, dim, h, hdx, rigid_bodies=[], rigid_boundaries=[],
                  artificial_vis_alpha=1.0, artificial_vis_beta=0.0,
                  artificial_stress_eps=0.3, kr=1e8, kf=1e5,
-                 fric_coeff=0.0, gx=0., gy=0., gz=0.):
+                 fric_coeff=0.0, mach_no=0.1, u_max=1., gx=0., gy=0., gz=0.):
         self.solids = solids
 
         self.rigid_boundaries = rigid_boundaries
@@ -874,6 +992,11 @@ class SolidsScheme(Scheme):
         self.gy = gy
         self.gz = gz
 
+        self.use_ctvf = False
+        self.kernel_factor = 3
+        self.mach_no = mach_no
+        self.u_max = u_max
+
         self.solver = None
 
         self.attributes_changed()
@@ -887,6 +1010,7 @@ class SolidsScheme(Scheme):
         group.add_argument("--artificial-vis-beta", action="store",
                            dest="artificial_vis_beta", default=1.0, type=float,
                            help="Artificial viscosity coefficients, beta")
+
         # add_bool_argument(group, 'mie-gruneisen-eos', dest='mie_gruneisen_eos',
         #                   default=True, help='Use Mie Gruneisen equation of state')
 
@@ -905,11 +1029,15 @@ class SolidsScheme(Scheme):
                            type=float,
                            help="Friction coefficient")
 
+        add_bool_argument(group, 'use-ctvf', dest='use_ctvf',
+                          default=False,
+                          help='Use particle shifting')
+
     def consume_user_options(self, options):
         _vars = [
             'artificial_vis_alpha',
             # 'mie_gruneisen_eos',
-            'kr', 'kf', 'fric_coeff'
+            'kr', 'kf', 'fric_coeff', 'use_ctvf'
         ]
         data = dict((var, self._smart_getattr(options, var)) for var in _vars)
         self.configure(**data)
@@ -947,7 +1075,7 @@ class SolidsScheme(Scheme):
         for solid in self.solids:
             g1.append(ContinuityEquation(dest=solid, sources=[solid]))
 
-            g1.append(VelocityGradient2D(dest=solid, sources=[solid]))
+            g1.append(VelocityGradient3D(dest=solid, sources=[solid]))
 
             # g1.append(
             #     MonaghanArtificialStress(dest=solid, sources=None,
@@ -973,6 +1101,17 @@ class SolidsScheme(Scheme):
         g2 = []
         g3 = []
         g4 = []
+
+        if self.use_ctvf:
+            for solid in self.solids:
+                g1.append(
+                    SetHIJForInsideParticles(dest=solid, sources=[solid],
+                                             h=self.h,
+                                             kernel_factor=self.kernel_factor))
+
+                # g1.append(SummationDensitySplash(dest=solid,
+                #                                  sources=self.solids+self.boundaries))
+            stage2.append(Group(g1))
 
         for solid in self.solids:
             # if self.mie_gruneisen_eos is True:
@@ -1010,6 +1149,12 @@ class SolidsScheme(Scheme):
 
             g4.append(MomentumEquationSolids(dest=solid,
                                              sources=[solid]))
+
+            if self.use_ctvf:
+                g4.append(
+                    ComputeAuHatETVFSun2019Solid(
+                        dest=solid, sources=[solid],
+                        mach_no=self.mach_no, u_max=self.u_max))
 
             g4.append(
                 EnergyEquationWithStress(
@@ -1197,7 +1342,6 @@ class SolidsScheme(Scheme):
                                        set_moment_of_inertia_and_its_inverse,
                                        BodyForce, SumUpExternalForces,
                                        normalize_R_orientation)
-
 
         pas = dict([(p.name, p) for p in particles])
 

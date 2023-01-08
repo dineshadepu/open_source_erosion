@@ -40,8 +40,8 @@ rc('axes', prop_cycle=(
 # n_core = free_cores()
 # n_thread = 2 * free_cores()
 
-n_core = 24
-n_thread = 24 * 2
+n_core = 4
+n_thread = n_core * 2
 backend = ' --openmp '
 
 
@@ -1010,6 +1010,472 @@ class CaoXuerui2022SphericalParticleImpact2D(Problem):
         self.make_output_dir()
 
 
+class CaoXuerui2022SphericalParticleImpact3D(Problem):
+    def get_name(self):
+        return 'cao_xuerui_2022_spherical_particle_impact_3d'
+
+    def setup(self):
+        get_path = self.input_path
+
+        cmd = 'python code/cao_xuerui_2022_spherical_particle_impact_3d.py' + backend
+
+        # Base case info
+        self.case_info = {
+            'vmag_10': (dict(
+                scheme='solid',
+                detail=None,
+                pfreq=500,
+                kr=1e8,
+                kf=1e6,
+                fric_coeff=0.1,
+                vel_alpha=45.,
+                vel_magn=10.,
+                samples=20000,
+                # azimuth_theta=-5.,
+                tf=5*1e-5,
+                ), 'Vel=10'),
+
+            'vmag_12': (dict(
+                scheme='solid',
+                detail=None,
+                pfreq=500,
+                kr=1e8,
+                kf=1e6,
+                fric_coeff=0.1,
+                vel_alpha=45.,
+                vel_magn=12.,
+                samples=20000,
+                # azimuth_theta=-5.,
+                tf=5*1e-5,
+                ), 'Vel=12'),
+
+            'vmag_14': (dict(
+                scheme='solid',
+                detail=None,
+                pfreq=500,
+                kr=1e8,
+                kf=1e6,
+                fric_coeff=0.1,
+                vel_alpha=45.,
+                vel_magn=14.,
+                samples=20000,
+                # azimuth_theta=-5.,
+                tf=5*1e-5,
+                ), 'Vel=14'),
+
+            'vmag_16': (dict(
+                scheme='solid',
+                detail=None,
+                pfreq=500,
+                kr=1e8,
+                kf=1e6,
+                fric_coeff=0.1,
+                vel_alpha=45.,
+                vel_magn=16.,
+                samples=20000,
+                # azimuth_theta=-5.,
+                tf=5*1e-5,
+                ), 'Vel=16'),
+
+            'vmag_18': (dict(
+                scheme='solid',
+                detail=None,
+                pfreq=500,
+                kr=1e8,
+                kf=1e6,
+                fric_coeff=0.1,
+                vel_alpha=45.,
+                vel_magn=18.,
+                samples=20000,
+                # azimuth_theta=-5.,
+                tf=5*1e-5,
+                ), 'Vel=18'),
+        }
+
+        self.cases = [
+            Simulation(get_path(name), cmd,
+                       job_info=dict(n_core=n_core,
+                                     n_thread=n_thread), cache_nnps=None,
+                       **scheme_opts(self.case_info[name][0]))
+            for name in self.case_info
+        ]
+
+    def run(self):
+        self.make_output_dir()
+        self.plot_displacement()
+
+    def plot_displacement(self):
+        data = {}
+        for name in self.case_info:
+            data[name] = np.load(self.input_path(name, 'results.npz'))
+
+        rand_case = (list(data.keys())[0])
+
+        vel_exp = data[rand_case]['vel_exp']
+        penetration_exp = data[rand_case]['penetration_exp']
+        vel_sim = data[rand_case]['vel_sim']
+        penetration_sim = data[rand_case]['penetration_sim']
+
+        # ==================================
+        # Plot x amplitude
+        # ==================================
+        plt.clf()
+        plt.plot(vel_exp, penetration_exp, "-^", label='exp')
+        plt.plot(vel_sim, penetration_sim, "-o", label='FEM')
+
+        vel_current_array = []
+        penetration_current_array = []
+        for name in self.case_info:
+            vel_current = data[name]['vel_current']
+            penetration_current = data[name]['penetration_current']
+            vel_current_array.append(data[name]['vel_current'][0])
+            penetration_current_array.append(data[name]['penetration_current'][0])
+
+            # plt.plot(t_ctvf, x_ctvf, '-', label=self.case_info[name][1])
+            # modifying this for single resolution run
+        plt.plot(vel_current_array, penetration_current_array, "-+", label='current')
+
+        res = os.path.join(self.input_path(), "results.npz")
+        np.savez(res,
+                 vel_current_array=vel_current_array,
+                 penetration_current_array=penetration_current_array,
+                 vel_exp=vel_exp,
+                 penetration_exp=penetration_exp,
+                 vel_fem=vel_sim,
+                 penetration_fem=penetration_sim)
+
+
+        plt.title('Penetration vs velocity')
+        plt.xlabel('Velocity (m/s)')
+        plt.ylabel('Penetration depth (micrometers)')
+        plt.legend()
+        # plt.tight_layout(pad=0)
+        plt.savefig(self.output_path('penetration_vs_velocity.pdf'))
+        plt.clf()
+        plt.close()
+
+
+class HighCaoXuerui2022SphericalParticleImpact3D(Problem):
+    def get_name(self):
+        return 'high_cao_xuerui_2022_spherical_particle_impact_3d'
+
+    def setup(self):
+        get_path = self.input_path
+
+        cmd = 'python code/cao_xuerui_2022_spherical_particle_impact_3d.py' + backend
+
+        # Base case info
+        self.case_info = {
+            'vmag_10': (dict(
+                scheme='solid',
+                detail=None,
+                pfreq=500,
+                kr=1e8,
+                kf=1e6,
+                fric_coeff=0.1,
+                vel_alpha=45.,
+                vel_magn=10.,
+                samples=40000,
+                target_length_factor=1.3,
+                # azimuth_theta=-5.,
+                tf=5*1e-5,
+                timestep=2e-9
+                ), 'Vel=10'),
+
+            'vmag_12': (dict(
+                scheme='solid',
+                detail=None,
+                pfreq=500,
+                kr=1e8,
+                kf=1e6,
+                fric_coeff=0.1,
+                vel_alpha=45.,
+                vel_magn=12.,
+                samples=40000,
+                target_length_factor=1.3,
+                # azimuth_theta=-5.,
+                tf=5*1e-5,
+                timestep=2e-9
+                ), 'Vel=12'),
+
+            'vmag_14': (dict(
+                scheme='solid',
+                detail=None,
+                pfreq=500,
+                kr=1e8,
+                kf=1e6,
+                fric_coeff=0.1,
+                vel_alpha=45.,
+                vel_magn=14.,
+                samples=40000,
+                target_length_factor=1.3,
+                # azimuth_theta=-5.,
+                tf=5*1e-5,
+                timestep=2e-9
+                ), 'Vel=14'),
+
+            'vmag_16': (dict(
+                scheme='solid',
+                detail=None,
+                pfreq=500,
+                kr=1e8,
+                kf=1e6,
+                fric_coeff=0.1,
+                vel_alpha=45.,
+                vel_magn=16.,
+                samples=40000,
+                target_length_factor=1.3,
+                # azimuth_theta=-5.,
+                tf=5*1e-5,
+                timestep=2e-9
+                ), 'Vel=16'),
+
+            'vmag_18': (dict(
+                scheme='solid',
+                detail=None,
+                pfreq=500,
+                kr=1e8,
+                kf=1e6,
+                fric_coeff=0.1,
+                vel_alpha=45.,
+                vel_magn=18.,
+                samples=40000,
+                target_length_factor=1.3,
+                # azimuth_theta=-5.,
+                tf=5*1e-5,
+                timestep=2e-9
+                ), 'Vel=18'),
+        }
+
+        self.cases = [
+            Simulation(get_path(name), cmd,
+                       job_info=dict(n_core=n_core,
+                                     n_thread=n_thread), cache_nnps=None,
+                       **scheme_opts(self.case_info[name][0]))
+            for name in self.case_info
+        ]
+
+    def run(self):
+        self.make_output_dir()
+        self.plot_displacement()
+
+    def plot_displacement(self):
+        data = {}
+        for name in self.case_info:
+            data[name] = np.load(self.input_path(name, 'results.npz'))
+
+        rand_case = (list(data.keys())[0])
+
+        vel_exp = data[rand_case]['vel_exp']
+        penetration_exp = data[rand_case]['penetration_exp']
+        vel_sim = data[rand_case]['vel_sim']
+        penetration_sim = data[rand_case]['penetration_sim']
+
+        # ==================================
+        # Plot x amplitude
+        # ==================================
+        plt.clf()
+        plt.plot(vel_exp, penetration_exp, "-^", label='exp')
+        plt.plot(vel_sim, penetration_sim, "-o", label='FEM')
+
+        vel_current_array = []
+        penetration_current_array = []
+        for name in self.case_info:
+            vel_current = data[name]['vel_current']
+            penetration_current = data[name]['penetration_current']
+            vel_current_array.append(data[name]['vel_current'][0])
+            penetration_current_array.append(data[name]['penetration_current'][0])
+
+            # plt.plot(t_ctvf, x_ctvf, '-', label=self.case_info[name][1])
+            # modifying this for single resolution run
+        plt.plot(vel_current_array, penetration_current_array, "-+", label='current')
+
+        res = os.path.join(self.input_path(), "results.npz")
+        np.savez(res,
+                 vel_current_array=vel_current_array,
+                 penetration_current_array=penetration_current_array,
+                 vel_exp=vel_exp,
+                 penetration_exp=penetration_exp,
+                 vel_fem=vel_sim,
+                 penetration_fem=penetration_sim)
+
+        plt.title('Penetration vs velocity')
+        plt.xlabel('Velocity (m/s)')
+        plt.ylabel('Penetration depth (micrometers)')
+        plt.legend()
+        # plt.tight_layout(pad=0)
+        plt.savefig(self.output_path('penetration_vs_velocity.pdf'))
+        plt.clf()
+        plt.close()
+
+
+class IncreasedLengthCaoXuerui2022SphericalParticleImpact3D(Problem):
+    def get_name(self):
+        return 'increased_length_cao_xuerui_2022_spherical_particle_impact_3d'
+
+    def setup(self):
+        get_path = self.input_path
+
+        cmd = 'python code/cao_xuerui_2022_spherical_particle_impact_3d.py' + backend
+
+        # Base case info
+        self.case_info = {
+            'samples_20000_vmag_14': (dict(
+                scheme='solid',
+                detail=None,
+                pfreq=500,
+                kr=1e8,
+                kf=1e6,
+                fric_coeff=0.1,
+                vel_alpha=45.,
+                vel_magn=14.,
+                samples=20000,
+                target_length_factor=1.3,
+                # azimuth_theta=-5.,
+                tf=5*1e-5,
+                ), 'Vel=14'),
+
+            'samples_20000_vmag_16': (dict(
+                scheme='solid',
+                detail=None,
+                pfreq=500,
+                kr=1e8,
+                kf=1e6,
+                fric_coeff=0.1,
+                vel_alpha=45.,
+                vel_magn=16.,
+                samples=20000,
+                target_length_factor=1.3,
+                # azimuth_theta=-5.,
+                tf=5*1e-5,
+                ), 'Vel=16'),
+
+            'samples_20000_vmag_18': (dict(
+                scheme='solid',
+                detail=None,
+                pfreq=500,
+                kr=1e8,
+                kf=1e6,
+                fric_coeff=0.1,
+                vel_alpha=45.,
+                vel_magn=18.,
+                samples=20000,
+                target_length_factor=1.3,
+                # azimuth_theta=-5.,
+                tf=5*1e-5,
+                ), 'Vel=18'),
+        }
+
+        self.cases = [
+            Simulation(get_path(name), cmd,
+                       job_info=dict(n_core=n_core,
+                                     n_thread=n_thread), cache_nnps=None,
+                       **scheme_opts(self.case_info[name][0]))
+            for name in self.case_info
+        ]
+
+    def run(self):
+        self.make_output_dir()
+        self.plot_displacement()
+
+    def plot_displacement(self):
+        data = {}
+        for name in self.case_info:
+            data[name] = np.load(self.input_path(name, 'results.npz'))
+
+        rand_case = (list(data.keys())[0])
+
+        vel_exp = data[rand_case]['vel_exp']
+        penetration_exp = data[rand_case]['penetration_exp']
+        vel_sim = data[rand_case]['vel_sim']
+        penetration_sim = data[rand_case]['penetration_sim']
+
+        # ==================================
+        # Plot x amplitude
+        # ==================================
+        plt.clf()
+        plt.plot(vel_exp, penetration_exp, "-^", label='exp')
+        plt.plot(vel_sim, penetration_sim, "-o", label='FEM')
+
+        vel_current_array = []
+        penetration_current_array = []
+        for name in self.case_info:
+            vel_current = data[name]['vel_current']
+            penetration_current = data[name]['penetration_current']
+            vel_current_array.append(data[name]['vel_current'][0])
+            penetration_current_array.append(data[name]['penetration_current'][0])
+
+            # plt.plot(t_ctvf, x_ctvf, '-', label=self.case_info[name][1])
+            # modifying this for single resolution run
+        plt.plot(vel_current_array, penetration_current_array, "-+", label='current')
+
+        res = os.path.join(self.input_path(), "results.npz")
+        np.savez(res,
+                 vel_current_array=vel_current_array,
+                 penetration_current_array=penetration_current_array,
+                 vel_exp=vel_exp,
+                 penetration_exp=penetration_exp,
+                 vel_fem=vel_sim,
+                 penetration_fem=penetration_sim)
+
+        plt.title('Penetration vs velocity')
+        plt.xlabel('Velocity (m/s)')
+        plt.ylabel('Penetration depth (micrometers)')
+        plt.legend()
+        # plt.tight_layout(pad=0)
+        plt.savefig(self.output_path('penetration_vs_velocity.pdf'))
+        plt.clf()
+        plt.close()
+
+
+class CompareIncreasedAndNormalLengthCaoXuerui2022SphericalParticleImpact3D(Problem):
+    def get_name(self):
+        return 'compare_increased_vs_normal_length_cao_xuerui_2022_spherical_particle_impact_3d'
+
+    def run(self):
+        self.make_output_dir()
+        self.plot_displacement()
+
+    def plot_displacement(self):
+        data = np.load('outputs/increased_length_cao_xuerui_2022_spherical_particle_impact_3d/results.npz')
+
+        vel_exp = data['vel_exp']
+        penetration_exp = data['penetration_exp']
+        vel_sim = data['vel_fem']
+        penetration_sim = data['penetration_fem']
+        vel_increased = data['vel_current_array']
+        penetration_increased = data['penetration_current_array']
+
+        data = np.load('outputs/cao_xuerui_2022_spherical_particle_impact_3d/results.npz')
+
+        vel_normal = data['vel_current_array']
+        penetration_normal = data['penetration_current_array']
+
+        data = np.load('outputs/high_cao_xuerui_2022_spherical_particle_impact_3d/results.npz')
+
+        vel_high_res = data['vel_current_array']
+        penetration_high_res = data['penetration_current_array']
+
+        # ==================================
+        # Plot x amplitude
+        # ==================================
+        plt.clf()
+        plt.plot(vel_exp, penetration_exp, "-^", label='exp')
+        plt.plot(vel_sim, penetration_sim, "-o", label='FEM')
+        plt.plot(vel_increased, penetration_increased, "-+", label='SPH: Increased Length')
+        plt.plot(vel_normal, penetration_normal, "-+", label='SPH: Normal Length')
+        plt.plot(vel_high_res, penetration_high_res, "-+", label='SPH: High Res, normal length')
+
+        plt.title('Penetration vs velocity')
+        plt.xlabel('Velocity (m/s)')
+        plt.ylabel('Penetration depth (micrometers)')
+        plt.legend()
+        # plt.tight_layout(pad=0)
+        plt.savefig(self.output_path('penetration_vs_velocity.pdf'))
+        plt.clf()
+        plt.close()
+
+
 class RigidRigidInteractionExample1(Problem):
     def get_name(self):
         return 'rigid_rigid_interaction_example_1'
@@ -1088,6 +1554,7 @@ class MultiBodyErosionExamle1(Problem):
     def run(self):
         self.make_output_dir()
 
+
 if __name__ == '__main__':
     PROBLEMS = [TestRigidBodyCollision1,
                 Mohseni2021ControlledSlidingOnAFlatSurface,
@@ -1106,9 +1573,17 @@ if __name__ == '__main__':
 
                 # Main benchmarks
                 Dong2016CaseA1SquareParticleOnAl6061T6,
-                Dong2016CaseA1SquareParticleOnAl6061T6,
+                # Dong2016CaseA1SquareParticleOnAl6061T6,
+                CaoXuerui2022SphericalParticleImpact2D,
+                CaoXuerui2022SphericalParticleImpact3D,
                 RigidRigidInteractionExample1,
-                MultiBodyErosionExamle1]
+                MultiBodyErosionExamle1,
+
+                # Resolution study
+                HighCaoXuerui2022SphericalParticleImpact3D,
+                IncreasedLengthCaoXuerui2022SphericalParticleImpact3D,
+                CompareIncreasedAndNormalLengthCaoXuerui2022SphericalParticleImpact3D
+    ]
 
     automator = Automator(
         simulation_dir='outputs',

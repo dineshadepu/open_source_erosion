@@ -1,3 +1,4 @@
+# python code/cao_xuerui_2022_spherical_particle_impact_3d.py --openmp --max-s 1 --cache-nnps --scheme=solid --detail --pfreq=500 --kr=100000000.0 --kf=1000000.0 --fric-coeff=0.1 --vel-alpha=45.0 --vel-magn=10.0 --samples=30000 --tf=5e-05
 import numpy as np
 import os
 from math import cos, sin
@@ -100,6 +101,7 @@ class CaoXuerui2022SphericalParticleImpact3D(Application):
         self.rigid_body_rho = 7850.
 
         # geometry
+        self.target_length_factor = 1.0
         self.target_length = 70 * 50. * 1e-6
         self.target_height = 15 * 50. * 1e-6
         # z-direction, out of the screen
@@ -118,11 +120,10 @@ class CaoXuerui2022SphericalParticleImpact3D(Application):
         self.seval = None
 
         # attributes for Sun PST technique
-        self.u_f = 0.059
-        self.u_max = self.u_f * self.c0
+        u_max = 1.  # manually coded from the simulation output
 
         # this is manually taken by running one simulation
-        self.u_max = 50
+        self.u_max = 5. * u_max
         self.mach_no = self.u_max / self.c0
 
         # attributes for IPST technique
@@ -152,6 +153,20 @@ class CaoXuerui2022SphericalParticleImpact3D(Application):
                            default=45.,
                            help="Angle at which the velocity vector is pointed")
 
+        group.add_argument("--vel-magn",
+                           action="store",
+                           type=float,
+                           dest="vel_magn",
+                           default=18.,
+                           help="Magnitude of the impactor velocity")
+
+        group.add_argument("--omega-magn",
+                           action="store",
+                           type=float,
+                           dest="omega_magn",
+                           default=1280.,
+                           help="Magnitude of the angular velocity")
+
         group.add_argument("--spacing",
                            action="store",
                            type=float,
@@ -166,9 +181,19 @@ class CaoXuerui2022SphericalParticleImpact3D(Application):
                            default=20000,
                            help="samples (default to 3000)")
 
+        group.add_argument("--target-length-factor",
+                           action="store",
+                           type=float,
+                           dest="target_length_factor",
+                           default=1.,
+                           help="Increase the target length with the given factor (default: 1.0)")
+
     def consume_user_options(self):
         # self.nu = self.options.nu
+        self.vel_magn = self.options.vel_magn
+        self.omega_magn = self.options.omega_magn
         self.vel_alpha = self.options.vel_alpha
+        self.target_length_factor = self.options.target_length_factor
         # print("impact angle", self.vel_alpha)
 
         # ================================
@@ -198,17 +223,21 @@ class CaoXuerui2022SphericalParticleImpact3D(Application):
 
         # compute the timestep
         # self.dt = 0.25 * self.h / ((self.E / self.rho0)**0.5 + 2.85)
-        self.dt = 2e-9
+        self.dt = 3e-9
         print("timestep is ", self.dt)
 
     def create_particles(self):
+        length = self.target_length_factor * self.target_length
         x, y, z = get_3d_block(dx=self.spacing,
-                               length=self.target_length + 6. * self.dx,
+                               length=length + 6. * self.dx,
                                height=self.target_height + 6. * self.dx,
                                depth=self.target_length + 6. * self.dx)
         x = x.ravel()
         y = y.ravel()
         z = z.ravel()
+
+        # Move the target to the right
+        x += (self.target_length_factor - 1.) / 2. * self.target_length
 
         dx = self.dx
         hdx = self.hdx
@@ -302,14 +331,15 @@ class CaoXuerui2022SphericalParticleImpact3D(Application):
 
         self.scheme.setup_properties([target, rigid_body])
 
-        vel = 18.
+        self.vel_magn = self.options.vel_magn
+        self.omega_magn = self.options.omega_magn
 
         angle = self.vel_alpha / 180 * np.pi
         self.scheme.scheme.set_linear_velocity(
-            rigid_body, np.array([vel * cos(angle),
-                                  -vel * sin(angle), 0.]))
+            rigid_body, np.array([self.vel_magn * cos(angle),
+                                  -self.vel_magn * sin(angle), 0.]))
         self.scheme.scheme.set_angular_velocity(
-            rigid_body, np.array([0., 0., -1280]))
+            rigid_body, np.array([0., 0., self.omega_magn]))
 
         # set the boundary particles for this particular example as, we are only
         # creating particles on the surface
@@ -398,10 +428,38 @@ class CaoXuerui2022SphericalParticleImpact3D(Application):
                              artificial_vis_alpha=self.artificial_vis_alpha,
                              artificial_vis_beta=self.artificial_vis_beta,
                              gy=0.,  # No change in the result
-                             kr=1e12)
+                             kr=1e12,
+                             mach_no=self.mach_no,
+                             u_max=self.u_max)
 
         s = SchemeChooser(default='solid', solid=solid)
         return s
+
+    def _make_accel_eval(self, equations, pa_arrays):
+        if self.seval is None:
+            kernel = QuinticSpline(dim=self.dim)
+            seval = SPHEvaluator(arrays=pa_arrays,
+                                 equations=equations,
+                                 dim=self.dim,
+                                 kernel=kernel)
+            self.seval = seval
+            return self.seval
+        else:
+            self.seval.update()
+            return self.seval
+        return seval
+
+    def pre_step(self, solver):
+        if self.options.use_ctvf:
+            if solver.count % 10 == 0:
+                t = solver.t
+                dt = solver.dt
+
+                arrays = self.particles
+                a_eval = self._make_accel_eval(self.boundary_equations, arrays)
+
+                # When
+                a_eval.evaluate(t, dt)
 
     # def post_step(self, solver):
     #     for pa in self.particles:
@@ -435,6 +493,7 @@ class CaoXuerui2022SphericalParticleImpact3D(Application):
 
         sph_eval.evaluate(dt=0.1)
         return pa
+
 
     def post_process(self, fname):
         import matplotlib.pyplot as plt
@@ -472,7 +531,8 @@ class CaoXuerui2022SphericalParticleImpact3D(Application):
             disp_neg.append(val)
 
         deformation_index = np.where(disp_neg == max(disp_neg))[0]
-        print("Max displacement is", max(disp_neg)*1e6)
+        penetration_current = max(disp_neg)*1e6
+        print("Max displacement is", penetration_current)
 
         indices = np.where(z_0 == z_0[deformation_index])
         x_deformed = target.x[indices]
@@ -487,22 +547,69 @@ class CaoXuerui2022SphericalParticleImpact3D(Application):
         indices = []
         for i in range(len(x_deformed_surface)):
             if y_deformed_surface[i] > 0.:
-                if x_deformed_surface[i] > -0.0015 and x_deformed_surface[i] < 0.0015:
-                    indices.append(i)
+                # if x_deformed_surface[i] > -0.0015 and x_deformed_surface[i] < 0.0015:
+                indices.append(i)
 
         plt.title('Particle plot')
         plt.xlabel('x')
         plt.ylabel('y')
         plt.scatter(x_deformed_surface[indices]*1e6, y_deformed_surface[indices]*1e6)
         # plt.axes().set_aspect('equal', 'datalim')
-        plt.legend()
-        plt.ylim(450, 570)
+        # plt.legend()
+        # plt.ylim(450, 570)
         fig = os.path.join(os.path.dirname(fname), "topology.png")
         plt.savefig(fig, dpi=300)
-        plt.show()
+        # plt.show()
         # # ========================
         # # x amplitude figure
         # # ========================
+
+        # Save the data
+        # Numerical data
+        path = os.path.abspath(__file__)
+        directory = os.path.dirname(path)
+
+        # load the data
+        data_exp = np.loadtxt(
+            os.path.join(directory, 'cao_xuerui_2022_spherical_particle_impact_3d_exp_penetration_depth_vs_incident_velocity.csv'),
+            delimiter=',')
+
+        data_sim = np.loadtxt(
+            os.path.join(directory, 'cao_xuerui_2022_spherical_particle_impact_3d_numerical_penetration_depth_vs_incident_velocity.csv'),
+            delimiter=',')
+
+        vel_exp, penetration_exp = data_exp[:, 0], data_exp[:, 1]
+        vel_sim, penetration_sim = data_sim[:, 0], data_sim[:, 1]
+        self.vel_magn = self.options.vel_magn
+        self.omega_magn = self.options.omega_magn
+        self.vel_alpha = self.options.vel_alpha
+
+        res = os.path.join(self.output_dir, "results.npz")
+        np.savez(res,
+                 vel_exp=vel_exp,
+                 penetration_exp=penetration_exp,
+                 vel_sim=vel_sim,
+                 penetration_sim=penetration_sim,
+                 vel_current=[self.vel_magn],
+                 penetration_current=[penetration_current])
+
+        # ========================
+        # x amplitude figure
+        # ========================
+        plt.clf()
+        plt.plot([self.options.vel_magn], [penetration_current], "-+", label='current')
+        plt.plot(vel_exp, penetration_exp, "-^", label='exp')
+        plt.plot(vel_sim, penetration_sim, "-o", label='FEM')
+
+        plt.title('Penetration vs velocity')
+        plt.xlabel('Velocity (m/s)')
+        plt.ylabel('Penetration depth (micrometers)')
+        plt.legend()
+        fig = os.path.join(os.path.dirname(fname), "penetration_vs_velocity.pdf")
+        plt.savefig(fig, dpi=300)
+        # ========================
+        # x amplitude figure
+        # ========================
 
 
 if __name__ == '__main__':
