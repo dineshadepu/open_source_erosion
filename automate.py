@@ -1825,16 +1825,243 @@ class MultiBodyErosionExamle1(Problem):
 
         # Base case info
         self.case_info = {
-            'dx_100': (dict(
+            'all_particles_self_intersection': (dict(
+                detail=None,
+                pfreq=100,
+                kr=1e11,
+                no_remove_interior=None,
+                self_interact=None,
+                ), 'Full body'),
+
+            'border_particles_self_intersection': (dict(
+                detail=None,
+                pfreq=100,
+                kr=1e11,
+                remove_interior=None,
+                self_interact=None,
+                ), 'Border body'),
+        }
+
+        self.cases = [
+            Simulation(get_path(name), cmd,
+                       job_info=dict(n_core=n_core,
+                                     n_thread=n_thread), cache_nnps=None,
+                       **scheme_opts(self.case_info[name][0]))
+            for name in self.case_info
+        ]
+
+    def run(self):
+        self.make_output_dir()
+        self.plot_velocity()
+        self.move_figures()
+
+    def plot_velocity(self):
+        data = {}
+        for name in self.case_info:
+            if name in ['all_particles_self_intersection', 'border_particles_self_intersection']:
+                data[name] = np.load(self.input_path(name, 'results.npz'))
+
+        plt.clf()
+        for name in ['all_particles_self_intersection', 'border_particles_self_intersection']:
+            t = data[name]['t']
+            y_com = data[name]['y_com']
+
+            plt.plot(t, y_com, label=name)
+
+            plt.xlabel('time')
+            plt.ylabel('x-com')
+            plt.legend(prop={'size': 12})
+            # plt.tight_layout(pad=0)
+        plt.savefig(self.output_path('self_intersection_y_com_vs_time.pdf'))
+        plt.clf()
+        plt.close()
+
+        data = {}
+        for name in self.case_info:
+            if name in ['all_particles_no_self_intersection', 'border_particles_no_self_intersection']:
+                data[name] = np.load(self.input_path(name, 'results.npz'))
+
+        plt.clf()
+        for name in ['all_particles_no_self_intersection', 'border_particles_no_self_intersection']:
+            t = data[name]['t']
+            y_com = data[name]['y_com']
+
+            plt.plot(t, y_com, label=name)
+
+            plt.xlabel('time')
+            plt.ylabel('x-com')
+            plt.legend(prop={'size': 12})
+            # plt.tight_layout(pad=0)
+        plt.savefig(self.output_path('no_self_intersection_y_com_vs_time.pdf'))
+        plt.clf()
+        plt.close()
+
+    def move_figures(self):
+        import shutil
+        import os
+
+        for name in self.case_info:
+            source = self.input_path(name)
+
+            target_dir = "manuscript/figures/" + source[8:] + "/"
+            os.makedirs(target_dir)
+            # print(target_dir)
+
+            file_names = os.listdir(source)
+
+            for file_name in file_names:
+                # print(file_name)
+                if file_name.endswith((".jpg", ".pdf", ".png")):
+                    # print(target_dir)
+                    shutil.copy(os.path.join(source, file_name), target_dir)
+
+
+class MultiBodyErosionExamle2(Problem):
+    def get_name(self):
+        return 'multi_body_erosion_example_2'
+
+    def setup(self):
+        get_path = self.input_path
+
+        cmd = 'python code/multi_body_erosion_example_2.py' + backend
+
+        # Base case info
+        self.case_info = {
+            'all_particles_self_intersection': (dict(
+                detail=None,
+                pfreq=100,
+                kr=1e11,
+                no_remove_interior=None,
+                self_interact=None,
+                ), 'Full body'),
+
+            'border_particles_self_intersection': (dict(
+                detail=None,
+                pfreq=100,
+                kr=1e11,
+                remove_interior=None,
+                self_interact=None,
+                ), 'Border body'),
+
+            'all_particles_no_self_intersection': (dict(
+                detail=None,
+                pfreq=100,
+                kr=1e11,
+                no_remove_interior=None,
+                no_self_interact=None,
+                ), 'Full body'),
+
+            'border_particles_no_self_intersection': (dict(
+                detail=None,
+                pfreq=100,
+                kr=1e11,
+                remove_interior=None,
+                no_self_interact=None,
+                ), 'Full body'),
+        }
+
+        self.cases = [
+            Simulation(get_path(name), cmd,
+                       job_info=dict(n_core=n_core,
+                                     n_thread=n_thread), cache_nnps=None,
+                       **scheme_opts(self.case_info[name][0]))
+            for name in self.case_info
+        ]
+
+    def run(self):
+        self.make_output_dir()
+        self.plot_velocity()
+        self.move_figures()
+
+    def plot_velocity(self):
+        data = {}
+        for name in self.case_info:
+            if name in ['all_particles_self_intersection', 'border_particles_self_intersection']:
+                data[name] = np.load(self.input_path(name, 'results.npz'))
+
+        plt.clf()
+        for name in ['all_particles_self_intersection', 'border_particles_self_intersection']:
+            t = data[name]['t']
+            y_com = data[name]['y_com']
+
+            plt.plot(t, y_com, label=name)
+
+            plt.xlabel('time')
+            plt.ylabel('x-com')
+            plt.legend(prop={'size': 12})
+            # plt.tight_layout(pad=0)
+        plt.savefig(self.output_path('self_intersection_y_com_vs_time.pdf'))
+        plt.clf()
+        plt.close()
+
+        data = {}
+        for name in self.case_info:
+            if name in ['all_particles_no_self_intersection', 'border_particles_no_self_intersection']:
+                data[name] = np.load(self.input_path(name, 'results.npz'))
+
+        plt.clf()
+        for name in ['all_particles_no_self_intersection', 'border_particles_no_self_intersection']:
+            t = data[name]['t']
+            y_com = data[name]['y_com']
+
+            plt.plot(t, y_com, label=name)
+
+            plt.xlabel('time')
+            plt.ylabel('x-com')
+            plt.legend(prop={'size': 12})
+            # plt.tight_layout(pad=0)
+        plt.savefig(self.output_path('no_self_intersection_y_com_vs_time.pdf'))
+        plt.clf()
+        plt.close()
+
+    def move_figures(self):
+        import shutil
+        import os
+
+        for name in self.case_info:
+            source = self.input_path(name)
+
+            target_dir = "manuscript/figures/" + source[8:] + "/"
+            os.makedirs(target_dir)
+            # print(target_dir)
+
+            file_names = os.listdir(source)
+
+            for file_name in file_names:
+                # print(file_name)
+                if file_name.endswith((".jpg", ".pdf", ".png")):
+                    # print(target_dir)
+                    shutil.copy(os.path.join(source, file_name), target_dir)
+
+
+class MultiBodyErosionExamle3(Problem):
+    def get_name(self):
+        return 'multi_body_erosion_example_3'
+
+    def setup(self):
+        get_path = self.input_path
+
+        cmd = 'python code/multi_body_erosion_example_3.py' + backend + ' --max-s 200 '
+
+        # Base case info
+        self.case_info = {
+            'hollow_body': (dict(
                 scheme='solid',
                 detail=None,
                 pfreq=100,
                 kr=1e11,
                 fric_coeff=0.1,
-                vel_alpha=30.,
-                azimuth_theta=-5.,
-                tf=100*1e-6,
-                ), 'dx_100'),
+                no_remove_interior=None,
+                ), 'hollow body'),
+
+            'full_body': (dict(
+                scheme='solid',
+                detail=None,
+                pfreq=100,
+                kr=1e11,
+                fric_coeff=0.1,
+                remove_interior=None,
+                ), 'full body'),
 
             # 'dx_50': (dict(
             #     scheme='solid',
@@ -1884,6 +2111,8 @@ if __name__ == '__main__':
                 CaoXuerui2022SphericalParticleImpact3D,
                 RigidRigidInteractionExample1,
                 MultiBodyErosionExamle1,
+                MultiBodyErosionExamle2,
+                MultiBodyErosionExamle3,
 
                 # Resolution study
                 HighCaoXuerui2022SphericalParticleImpact3D,

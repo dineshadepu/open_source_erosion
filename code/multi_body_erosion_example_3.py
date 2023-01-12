@@ -36,6 +36,45 @@ from pysph.tools.geometry import get_2d_block, rotate
 import matplotlib
 
 
+def get_files_at_given_times_from_log(files, times, logfile):
+    import re
+    result = []
+    time_pattern = r"output at time\ (\d+(?:\.\d+)?)"
+    file_count, time_count = 0, 0
+    with open(logfile, 'r') as f:
+        for line in f:
+            if time_count >= len(times):
+                break
+            t = re.findall(time_pattern, line)
+            if t:
+                if float(t[0]) in times:
+                    result.append(files[file_count])
+                    time_count += 1
+                elif float(t[0]) > times[time_count]:
+                    result.append(files[file_count])
+                    time_count += 1
+                file_count += 1
+    return result
+
+
+def get_files_at_given_times(files, times):
+    from pysph.solver.utils import load
+    result = []
+    count = 0
+    for f in files:
+        data = load(f)
+        t = data['solver_data']['t']
+        if count >= len(times):
+            break
+        if abs(t - times[count]) < t * 1e-8:
+            result.append(f)
+            count += 1
+        elif t > times[count]:
+            result.append(f)
+            count += 1
+    return result
+
+
 class Dong2016CaseA1SquareParticleOnAl6061T6(Application):
     def initialize(self):
         # constants
@@ -80,7 +119,7 @@ class Dong2016CaseA1SquareParticleOnAl6061T6(Application):
 
         self.dim = 2
 
-        self.tf = 100 * 1e-6
+        self.tf = 60 * 1e-6
 
         self.c0 = np.sqrt(self.E / (3 * (1. - 2 * self.nu) * self.rho0))
         self.pb = self.rho0 * self.c0**2.
@@ -131,6 +170,10 @@ class Dong2016CaseA1SquareParticleOnAl6061T6(Application):
                            default=100,
                            help="Spacing in nanometers")
 
+        add_bool_argument(group, 'remove-interior', dest='remove_interior',
+                          default=False,
+                          help='Remove the inside particles of rigid body')
+
     def consume_user_options(self):
         # self.nu = self.options.nu
         self.vel_alpha = self.options.vel_alpha
@@ -149,6 +192,8 @@ class Dong2016CaseA1SquareParticleOnAl6061T6(Application):
         self.dt = 0.25 * self.h / ((self.E / self.rho0)**0.5 + 2.85)
         # self.dt = 1e-9
         print("timestep is ", self.dt)
+
+        self.remove_interior = self.options.remove_interior
 
     def create_rigid_body(self):
         # create a row of six cylinders
@@ -194,7 +239,7 @@ class Dong2016CaseA1SquareParticleOnAl6061T6(Application):
                                     })
         dem_id = np.ones(len(target.x), dtype=int) * 0.
         target.add_property('dem_id', type='int', data=dem_id)
-        target.add_constant('total_no_bodies', [2])
+        target.add_constant('total_no_bodies', [4])
 
         indices = []
         min_y = min(target.y)
@@ -249,10 +294,10 @@ class Dong2016CaseA1SquareParticleOnAl6061T6(Application):
         body_id = np.concatenate((body_id_1, body_id_2, body_id_3))
         dem_id = body_id[:] + 1
         # reset to 1 so that the bodies don't collide among themselves
-        dem_id[:] = 1
+        # dem_id[:] = 1
         rigid_body.add_property('dem_id', type='int', data=dem_id)
         rigid_body.add_property('body_id', type='int', data=body_id)
-        rigid_body.add_constant('total_no_bodies', [2])
+        rigid_body.add_constant('total_no_bodies', [4])
 
         self.scheme.setup_properties([target, rigid_body])
 
@@ -271,11 +316,12 @@ class Dong2016CaseA1SquareParticleOnAl6061T6(Application):
         # self.scheme.scheme.set_angular_velocity(
         #     rigid_body, np.array([0.0, 0.0, 10.]))
         # remove particles which are not boundary
-        indices = []
-        for i in range(len(rigid_body.y)):
-            if rigid_body.is_boundary[i] == 0:
-                indices.append(i)
-        rigid_body.remove_particles(indices)
+        if self.remove_interior:
+            indices = []
+            for i in range(len(rigid_body.y)):
+                if rigid_body.is_boundary[i] == 0:
+                    indices.append(i)
+            rigid_body.remove_particles(indices)
 
         # setup Mie Grunieson of state parameters
         setup_mie_gruniesen_parameters(
@@ -307,10 +353,13 @@ class Dong2016CaseA1SquareParticleOnAl6061T6(Application):
         dt = self.dt
         tf = self.tf
 
-        output = np.array([0.0, 1.38 * 1e-3, 5.17 * 1e-3, 7.38 * 1e-3, 11.462 *
-                           1e-3, 15.4 * 1e-3])
+        output = np.array([0.0,
+                           4.524 * 1e-6, 3.117 * 1e-5, 5.731 * 1e-5,  # for all bodies
+                           9.0493 * 1e-6, 3.67 * 1e-5, 6. * 1e-5,  # for extrusion
+                           1.106 * 1e-5, 3.4689 * 1e-5, 5.8318 * 1e-5  # for extrusion
+        ])
 
-        pfreq = 300
+        pfreq = 100
 
         self.scheme.configure_solver(dt=dt, tf=tf, pfreq=pfreq,
                                      output_at_times=output)
@@ -338,6 +387,8 @@ class Dong2016CaseA1SquareParticleOnAl6061T6(Application):
         import matplotlib.pyplot as plt
         from matplotlib.patches import Rectangle
         from pysph.solver.utils import load, get_files
+        from mpl_toolkits.axes_grid1.inset_locator import zoomed_inset_axes
+        from mpl_toolkits.axes_grid1.inset_locator import mark_inset
 
         # =======================================
         # =======================================
@@ -383,41 +434,237 @@ class Dong2016CaseA1SquareParticleOnAl6061T6(Application):
 
         # =============================================================
         # =============================================================
-        # Save the plots at different times
+        # Save the plots of all bodies at three times
         info = self.read_info(fname)
         output_files = self.output_files
-        output_times = np.array([0.0, 1.8 * 1e-3, 4. * 1e-3])
+        output_times_all_bodies = np.array([4.524 * 1e-6, 3.117 * 1e-5, 5.731 * 1e-5])
         logfile = os.path.join(
             os.path.dirname(fname),
-            'yan_2021_curved_interface.log')
-        to_plot = get_files_at_given_times_from_log(output_files, output_times,
-                                                    logfile)
+            'multi_body_erosion_example_3.log')
+        # to_plot = get_files_at_given_times_from_log(output_files, output_times_all_bodies,
+        #                                             logfile)
+        to_plot = get_files_at_given_times(output_files, output_times_all_bodies)
+        # print(to_plot)
         for i, f in enumerate(to_plot):
             data = load(f)
             _t = data['solver_data']['t']
-            ring_1 = data['arrays']['block_left']
-            ring_2 = data['arrays']['block_right']
+            rigid_body = data['arrays']['rigid_body']
+            target = data['arrays']['target']
 
             s = 0.8
-            fig, axs = plt.subplots(1, 1, figsize=(8, 4))
-            axs.scatter(ring_1.x, ring_1.y, s=s, c=ring_1.sigma00, vmin=c_min,
-                        vmax=c_max, cmap="jet_r")
+            fig, axs = plt.subplots(1, 1, figsize=(10, 6))
+
+            x_min = -4.067 * 1e-3
+            x_max = 9.519 * 1e-3 + 4.78 * 1e-3 / 2.
+            y_min = -7.5 * 1e-4
+            y_max = 1.191 * 1e-2
+            # Get the rigid body particle arrays with in the given limits
+            filtr_1 = ((rigid_body.x >= x_min) & (rigid_body.x <= x_max)) & (
+                (rigid_body.y >= y_min) & (rigid_body.y <= y_max))
+            rigid_body_x = rigid_body.x[filtr_1] * 1e3
+            rigid_body_y = rigid_body.y[filtr_1] * 1e3
+            rigid_body_body_id = rigid_body.body_id[filtr_1]
+            tmp = axs.scatter(rigid_body_x, rigid_body_y, s=s, c=rigid_body_body_id)
+
+            # Get the target particle arrays with in the given limits
+            filtr_1 = ((target.x >= x_min) & (target.x <= x_max)) & (
+                (target.y >= y_min) & (target.y <= y_max))
+            target_x = target.x[filtr_1] * 1e3
+            target_y = target.y[filtr_1] * 1e3
+            target_eps = target.eff_plastic_strain[filtr_1]
+
+            # # Use this
+            # axs.scatter(target_x, target_y, s=s, c=target_m, vmin=c_min,
+            #             vmax=c_max, cmap="jet_r")
+            # Delete this later
+
+            # Set the limits for the extrapolated scattered values
+            x_min = x_min * 1e3
+            x_max = x_max * 1e3
+            y_min = y_min * 1e3
+            y_max = y_max * 1e3
+            axs.scatter(target_x, target_y, s=s, c=target_eps, cmap="jet_r")
+            axs.set_xlim([x_min, x_max])
+            axs.set_ylim([y_min, y_max])
+            axs.grid()
+            axs.set_aspect('equal', 'box')
+            plt.xlabel('x-dimension (10^{-3}(m))')
+            plt.ylabel('y-dimension (10^{-3}(m))')
+            # axs.set_title('still a circle, auto-adjusted data limits', fontsize=10)
+
+            # fig.colorbar(tmp, format='%.0e', orientation='horizontal',
+            #              shrink=0.7)
+            # axs.set_title(f"t = {_t:.1e} s")
+
+            # save the figure
+            figname = os.path.join(os.path.dirname(fname), "all_bodies_time" + str(i) + ".pdf")
+            fig.savefig(figname, dpi=300)
+
+        # =============================================================
+        # =============================================================
+        # Save the plots of the extrusion at three times
+        info = self.read_info(fname)
+        output_files = self.output_files
+        output_times_extrusion = np.array([9.0493 * 1e-6,
+                                           3.67 * 1e-5,
+                                           6. * 1e-5])
+        logfile = os.path.join(
+            os.path.dirname(fname),
+            'multi_body_erosion_example_3.log')
+        # to_plot = get_files_at_given_times_from_log(output_files, output_times_all_bodies,
+        #                                             logfile)
+        to_plot = get_files_at_given_times(output_files, output_times_extrusion)
+        # print(to_plot)
+        for i, f in enumerate(to_plot):
+            data = load(f)
+            _t = data['solver_data']['t']
+            rigid_body = data['arrays']['rigid_body']
+            target = data['arrays']['target']
+
+            s = 0.8
+            fig, axs = plt.subplots(1, 1, figsize=(6, 8))
+
+            x_min = 0.0018
+            x_max = 0.0052
+            y_min = 0.002
+            y_max = 0.003
+            # Get the target particle arrays with in the given limits
+            filtr_1 = ((target.x >= x_min) & (target.x <= x_max)) & (
+                (target.y >= y_min) & (target.y <= y_max))
+            target_x = target.x[filtr_1]
+            target_y = target.y[filtr_1]
+            target_eps = target.eff_plastic_strain[filtr_1]
+
+            # # Use this
+            # axs.scatter(target_x, target_y, s=s, c=target_m, vmin=c_min,
+            #             vmax=c_max, cmap="jet_r")
+            # Delete this later
+            tmp = axs.scatter(target_x*1e3, target_y*1e3, s=s, c=target_eps, cmap="jet_r")
+            x_min = 0.0018 * 1e3
+            x_max = 0.0052 * 1e3
+            y_min = 0.002 * 1e3
+            y_max = 0.003 * 1e3
+            axs.set_xlim([x_min, x_max])
+            axs.set_ylim([y_min, y_max])
+            axs.grid()
+            axs.set_aspect('equal', 'box')
+            plt.xlabel('x-dimension (10^{-3}(m))')
+            plt.ylabel('y-dimension (10^{-3}(m))')
+            # axs.set_title('still a circle, auto-adjusted data limits', fontsize=10)
+
+            # fig.colorbar(tmp, format='%.0e', orientation='horizontal',
+            #              shrink=0.7)
+            # axs.set_title(f"t = {_t:.1e} s")
+
+            # save the figure
+            figname = os.path.join(os.path.dirname(fname), "extrusion_time" + str(i) + ".pdf")
+            fig.savefig(figname, dpi=300)
+
+        # =============================================================
+        # =============================================================
+        # Save the plots of the chip separation at three times
+        info = self.read_info(fname)
+        output_files = self.output_files
+        output_times_chip_seperation = np.array([1.106 * 1e-5,
+                                           3.4689 * 1e-5,
+                                           5.8318 * 1e-5
+        ])
+        logfile = os.path.join(
+            os.path.dirname(fname),
+            'multi_body_erosion_example_3.log')
+        # to_plot = get_files_at_given_times_from_log(output_files, output_times_all_bodies,
+        #                                             logfile)
+        to_plot = get_files_at_given_times(output_files[::10], output_times_chip_seperation)
+        # print(to_plot)
+        for i, f in enumerate(to_plot):
+            data = load(f)
+            _t = data['solver_data']['t']
+            rigid_body = data['arrays']['rigid_body']
+            target = data['arrays']['target']
+
+            s = 0.8
+            fig, axs = plt.subplots(1, 1, figsize=(10, 6))
+
+            x_min = 3.836 * 1e-5
+            x_max = 8.502 * 1e-3 + 4.78 * 1e-3 / 2.
+            y_min = -3.68 * 1e-4
+            y_max = 1.113 * 1e-2
+            # Get the rigid body particle arrays with in the given limits
+            filtr_1 = ((rigid_body.x >= x_min) & (rigid_body.x <= x_max)) & (
+                (rigid_body.y >= y_min) & (rigid_body.y <= y_max))
+            rigid_body_x = rigid_body.x[filtr_1] * 1e3
+            rigid_body_y = rigid_body.y[filtr_1] * 1e3
+            rigid_body_body_id = rigid_body.body_id[filtr_1]
+            tmp = axs.scatter(rigid_body_x, rigid_body_y, s=s, c=rigid_body_body_id)
+            # Get the target particle arrays with in the given limits
+            filtr_1 = ((target.x >= x_min) & (target.x <= x_max)) & (
+                (target.y >= y_min) & (target.y <= y_max))
+            target_x = target.x[filtr_1] * 1e3
+            target_y = target.y[filtr_1] * 1e3
+            target_eps = target.eff_plastic_strain[filtr_1]
+
+            # # Use this
+            # axs.scatter(target_x, target_y, s=s, c=target_m, vmin=c_min,
+            #             vmax=c_max, cmap="jet_r")
+            # Delete this later
+            x_min = x_min * 1e3
+            x_max = x_max * 1e3
+            y_min = y_min * 1e3
+            y_max = y_max * 1e3
+            tmp = axs.scatter(target_x, target_y, s=s, c=target_eps, cmap="jet_r")
+            plt.xlabel('x-dimension (10^{-3}(m))')
+            plt.ylabel('y-dimension (10^{-3}(m))')
+
+            # ==================================
+            # The zoomed figure code starts here
+            # ==================================
+            if i == 0:
+                axins = zoomed_inset_axes(axs, 2, loc=7)
+                axins.scatter(target_x, target_y, s=s, c=target_eps, cmap="jet_r")
+                axins.set_xlim(3.5, 4.1)
+                axins.set_ylim(2.5, 3)
+                plt.xticks(visible=False)
+                plt.yticks(visible=False)
+                mark_inset(axs, axins, loc1=2, loc2=4, fc="none", ec="0.5")
+                axins.grid(False)
+                plt.draw()
+            # ==================================
+            elif i == 1:
+                axins = zoomed_inset_axes(axs, 2, loc=7)
+                axins.scatter(target_x, target_y, s=s, c=target_eps, cmap="jet_r")
+                axins.set_xlim(4.3, 5.7)
+                axins.set_ylim(3.2, 4.1)
+                plt.xticks(visible=False)
+                plt.yticks(visible=False)
+                mark_inset(axs, axins, loc1=2, loc2=4, fc="none", ec="0.5")
+                axins.grid(False)
+                plt.draw()
+            elif i == 2:
+                axins = zoomed_inset_axes(axs, 2, loc=4)
+                axins.scatter(target_x, target_y, s=s, c=target_eps, cmap="jet_r")
+                axins.set_xlim(5.2, 5.6)
+                axins.set_ylim(3.5, 4.2)
+                plt.xticks(visible=False)
+                plt.yticks(visible=False)
+                mark_inset(axs, axins, loc1=2, loc2=4, fc="none", ec="0.5")
+                axins.grid(False)
+                plt.draw()
+            # ==================================
+            # The zoomed figure code ends  here
+            # ==================================
+
             axs.set_xlim([x_min, x_max])
             axs.set_ylim([y_min, y_max])
             axs.grid()
             axs.set_aspect('equal', 'box')
             # axs.set_title('still a circle, auto-adjusted data limits', fontsize=10)
 
-            # im_ratio = tmp.shape[0]/tmp.shape[1]
-            tmp = axs.scatter(ring_2.x, ring_2.y, s=s, c=ring_2.sigma00,
-                              vmin=c_min, vmax=c_max, cmap="jet_r")
-            # fig.colorbar(tmp, fraction=0.046*im_ratio, pad=0.04)
-            fig.colorbar(tmp, format='%.0e', orientation='horizontal',
-                         shrink=0.7)
+            # fig.colorbar(tmp, format='%.0e', orientation='horizontal',
+            #              shrink=0.7)
             # axs.set_title(f"t = {_t:.1e} s")
 
             # save the figure
-            figname = os.path.join(os.path.dirname(fname), "time" + str(i) + ".pdf")
+            figname = os.path.join(os.path.dirname(fname), "chip_separation_time" + str(i) + ".pdf")
             fig.savefig(figname, dpi=300)
 
 

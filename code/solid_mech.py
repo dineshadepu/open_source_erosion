@@ -992,6 +992,7 @@ class SolidsScheme(Scheme):
         self.gy = gy
         self.gz = gz
 
+        self.self_interact = True
         self.use_ctvf = False
         self.kernel_factor = 3
         self.mach_no = mach_no
@@ -1033,11 +1034,15 @@ class SolidsScheme(Scheme):
                           default=False,
                           help='Use particle shifting')
 
+        add_bool_argument(group, 'self-interact', dest='self_interact',
+                          default=True,
+                          help='Enable collision among the rigid bodies')
+
     def consume_user_options(self, options):
         _vars = [
             'artificial_vis_alpha',
             # 'mie_gruneisen_eos',
-            'kr', 'kf', 'fric_coeff', 'use_ctvf'
+            'kr', 'kf', 'fric_coeff', 'use_ctvf', 'self_interact'
         ]
         data = dict((var, self._smart_getattr(options, var)) for var in _vars)
         self.configure(**data)
@@ -1241,43 +1246,44 @@ class SolidsScheme(Scheme):
             # ENDS
             # ==========================================================
 
-            # ==============================================================
-            # Compute the force on the rigid body due to other rigid bodies
-            # ==============================================================
-            g9 = []
-            for body in self.rigid_bodies:
-                g9.append(
-                    ComputeContactForceNormalsMohseniRB(
-                        dest=body, sources=self.rigid_bodies))
+            if self.self_interact:
+                # ==============================================================
+                # Compute the force on the rigid body due to other rigid bodies
+                # ==============================================================
+                g9 = []
+                for body in self.rigid_bodies:
+                    g9.append(
+                        ComputeContactForceNormalsMohseniRB(
+                            dest=body, sources=self.rigid_bodies))
 
-            stage2.append(Group(equations=g9, real=False))
+                stage2.append(Group(equations=g9, real=False))
 
-            g10 = []
-            for body in self.rigid_bodies:
-                g10.append(
-                    ComputeContactForceDistanceAndClosestPointMohseniRB(
-                        dest=body, sources=self.rigid_bodies))
+                g10 = []
+                for body in self.rigid_bodies:
+                    g10.append(
+                        ComputeContactForceDistanceAndClosestPointMohseniRB(
+                            dest=body, sources=self.rigid_bodies))
 
-            stage2.append(Group(equations=g10, real=False))
+                stage2.append(Group(equations=g10, real=False))
 
-            g5 = []
-            for body in self.rigid_bodies:
-                g5.append(
-                    ComputeContactForceMohseniRB(
-                        dest=body,
-                        sources=None,
-                        kr=self.kr,
-                        kf=self.kf,
-                        fric_coeff=self.fric_coeff))
+                g5 = []
+                for body in self.rigid_bodies:
+                    g5.append(
+                        ComputeContactForceMohseniRB(
+                            dest=body,
+                            sources=None,
+                            kr=self.kr,
+                            kf=self.kf,
+                            fric_coeff=self.fric_coeff))
 
-            stage2.append(Group(equations=g5, real=False))
+                stage2.append(Group(equations=g5, real=False))
 
-            g5 = []
-            for body in self.rigid_bodies:
-                g5.append(
-                    TransferContactForceMohseniRB(
-                        dest=body, sources=self.rigid_bodies))
-            stage2.append(Group(equations=g5, real=False))
+                g5 = []
+                for body in self.rigid_bodies:
+                    g5.append(
+                        TransferContactForceMohseniRB(
+                            dest=body, sources=self.rigid_bodies))
+                stage2.append(Group(equations=g5, real=False))
             # ==========================================================
             # Compute the force on the elastic solid due to rigid bodies
             # and on rigid body due to elastic solid
